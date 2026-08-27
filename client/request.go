@@ -11,7 +11,13 @@ import (
 var ErrPartialFrame = errors.New("client: partial Wayland frame write")
 
 func (ctx *Context) WriteMsg(b []byte, oob []byte) error {
-	return writeFrame(ctx.conn.WriteMsgUnix, ctx.conn.Write, b, oob)
+	if ctx.fatalErr != nil {
+		return ctx.fatalErr
+	}
+	if err := writeFrame(ctx.conn.WriteMsgUnix, ctx.conn.Write, b, oob); err != nil {
+		return ctx.setFatal(err)
+	}
+	return nil
 }
 
 type writeMsgUnixFunc func([]byte, []byte, *net.UnixAddr) (int, int, error)

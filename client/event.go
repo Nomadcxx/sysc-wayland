@@ -16,11 +16,14 @@ import (
 var oobSpace = unix.CmsgSpace(2 * 4)
 
 func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byte, err error) {
+	if ctx.fatalErr != nil {
+		return 0, 0, -1, nil, ctx.fatalErr
+	}
 	fd = -1
 	var fds []int
 	fail := func(err error) (uint32, uint32, int, []byte, error) {
 		closeFDs(fds)
-		return 0, 0, -1, nil, err
+		return 0, 0, -1, nil, ctx.setFatal(err)
 	}
 
 	header := make([]byte, 8)

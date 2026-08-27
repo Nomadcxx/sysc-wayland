@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 const firstServerID = uint32(0xff000000)
@@ -15,6 +18,7 @@ type Context struct {
 	// ponytail: one goroutine owns this map; add locking only if the public ownership contract changes.
 	objects   map[uint32]Proxy
 	currentID uint32
+	fatalErr  error
 }
 
 func (ctx *Context) Register(p Proxy) {
@@ -74,69 +78,92 @@ func (ctx *Context) SetReadDeadline(t time.Time) error {
 	return ctx.conn.SetReadDeadline(t)
 }
 
-func (ctx *Context) Fd() int {
+var ErrNilControlCallback = errors.New("client: nil descriptor callback")
+
+func (ctx *Context) ControlFD(fn func(fd int) error) error {
+	if fn == nil {
+		return ErrNilControlCallback
+	}
 	rawConn, err := ctx.conn.SyscallConn()
 	if err != nil {
-		return -1
+		return err
 	}
-	var fd int
-	rawConn.Control(func(f uintptr) {
-		fd = int(f)
+	return controlFD(rawConn, fn)
+}
+
+func controlFD(raw syscall.RawConn, fn func(int) error) error {
+	var callbackErr error
+	controlErr := raw.Control(func(fd uintptr) {
+		callbackErr = fn(int(fd))
 	})
-	return fd
+	return errors.Join(controlErr, callbackErr)
 }
 
 // Dispatch reads and processes incoming messages and calls [client.Dispatcher.Dispatch] on the
 // respective wayland protocol.
 // Dispatch must be called on the same goroutine as other interactions with the Context.
-// If a multi goroutine approach is desired, use [Context.GetDispatch] instead.
 // Dispatch blocks if there are no incoming messages.
 // A Dispatch loop is usually used to handle incoming messages.
-func (ctx *Context) Dispatch() error {
-	return ctx.GetDispatch()()
+func (ctx *Context) Dispatch() (dispatchErr error) {
+	if ctx.fatalErr != nil {
+		return ctx.fatalErr
+	}
+
+	senderID, opcode, fd, data, err := ctx.ReadMsg()
+	if err != nil {
+		return ctx.setFatal(fmt.Errorf("%w: %w", ErrDispatchUnableToReadMsg, err))
+	}
+	proxy, ok := ctx.lookupProxy(senderID)
+	if !ok {
+		closeReceivedFD(fd)
+		return ctx.setFatal(fmt.Errorf("%w (senderID=%d)", ErrDispatchSenderNotFound, senderID))
+	}
+	if proxy.IsZombie() {
+		closeReceivedFD(fd)
+		return nil
+	}
+	sender, ok := proxy.(Dispatcher)
+	if !ok {
+		closeReceivedFD(fd)
+		return ctx.setFatal(fmt.Errorf("%w (senderID=%d)", ErrDispatchSenderUnsupported, senderID))
+	}
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			closeReceivedFD(fd)
+			dispatchErr = ctx.setFatal(fmt.Errorf("dispatch: panic handling opcode=%d senderID=%d: %v", opcode, senderID, recovered))
+		}
+	}()
+	sender.Dispatch(opcode, fd, data)
+	if ctx.fatalErr != nil {
+		closeReceivedFD(fd)
+		return ctx.fatalErr
+	}
+	return nil
 }
 
 var ErrDispatchSenderNotFound = errors.New("dispatch: unable to find sender")
 var ErrDispatchSenderUnsupported = errors.New("dispatch: sender does not implement Dispatch method")
 var ErrDispatchUnableToReadMsg = errors.New("dispatch: unable to read msg")
 
-// GetDispatch reads incoming messages and returns the dispatch function which calls
-// [client.Dispatcher.Dispatch] on the respective wayland protocol.
-// This function is now thread-safe and can be called from multiple goroutines.
-// GetDispatch blocks if there are no incoming messages.
-func (ctx *Context) GetDispatch() func() error {
-	senderID, opcode, fd, data, err := ctx.ReadMsg() // Blocks if there are no incoming messages
-	if err != nil {
-		return func() error {
-			return fmt.Errorf("%w: %w", ErrDispatchUnableToReadMsg, err)
-		}
+func (ctx *Context) setFatal(err error) error {
+	if ctx.fatalErr == nil {
+		ctx.fatalErr = err
 	}
+	return ctx.fatalErr
+}
 
-	return func() (dispatchErr error) {
-		proxy, ok := ctx.lookupProxy(senderID)
-		if !ok {
-			return nil // Proxy already deleted via delete_id, silently ignore
-		}
+func (ctx *Context) recordDisplayError(event DisplayErrorEvent) {
+	var objectID uint32
+	if event.ObjectId != nil {
+		objectID = event.ObjectId.ID()
+	}
+	ctx.setFatal(fmt.Errorf("wl_display.error: object=%d code=%d: %s", objectID, event.Code, event.Message))
+}
 
-		if proxy.IsZombie() {
-			return nil // Zombie proxy, discard late events
-		}
-
-		sender, ok := proxy.(Dispatcher)
-		if !ok {
-			return fmt.Errorf("%w (senderID=%d)", ErrDispatchSenderUnsupported, senderID)
-		}
-
-		// generated Dispatch methods don't bounds-check wire data; surface a
-		// decoder panic as an error instead of crashing the process
-		defer func() {
-			if r := recover(); r != nil {
-				dispatchErr = fmt.Errorf("dispatch: panic handling opcode=%d senderID=%d: %v", opcode, senderID, r)
-			}
-		}()
-
-		sender.Dispatch(opcode, fd, data)
-		return nil
+func closeReceivedFD(fd int) {
+	if fd >= 0 {
+		_ = unix.Close(fd)
 	}
 }
 

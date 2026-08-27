@@ -1,8 +1,12 @@
 package client
 
 import (
+	"errors"
 	"fmt"
+	"syscall"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 func newTestContext() *Context {
@@ -100,3 +104,53 @@ func mustPanic(t *testing.T, fn func()) {
 	}()
 	fn()
 }
+
+func TestControlFDProvidesLiveSocket(t *testing.T) {
+	ctx, _ := socketPairContext(t)
+	callbackErr := errors.New("callback failed")
+	called := false
+
+	err := ctx.ControlFD(func(fd int) error {
+		called = true
+		if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err != nil {
+			t.Fatalf("callback descriptor is invalid: %v", err)
+		}
+		return callbackErr
+	})
+	if !called {
+		t.Fatal("ControlFD() did not call callback")
+	}
+	if !errors.Is(err, callbackErr) {
+		t.Fatalf("ControlFD() error = %v, want callback error", err)
+	}
+}
+
+func TestControlFDRejectsNilBeforeSocketAccess(t *testing.T) {
+	err := (&Context{}).ControlFD(nil)
+	if !errors.Is(err, ErrNilControlCallback) {
+		t.Fatalf("ControlFD(nil) error = %v, want ErrNilControlCallback", err)
+	}
+}
+
+func TestControlFDPreservesControlAndCallbackErrors(t *testing.T) {
+	controlErr := errors.New("control failed")
+	callbackErr := errors.New("callback failed")
+	raw := fakeRawConn{controlErr: controlErr}
+
+	err := controlFD(raw, func(int) error { return callbackErr })
+	if !errors.Is(err, controlErr) || !errors.Is(err, callbackErr) {
+		t.Fatalf("controlFD() error = %v, want both errors", err)
+	}
+}
+
+type fakeRawConn struct {
+	controlErr error
+}
+
+func (f fakeRawConn) Control(fn func(uintptr)) error {
+	fn(123)
+	return f.controlErr
+}
+
+func (fakeRawConn) Read(func(uintptr) bool) error  { return syscall.EINVAL }
+func (fakeRawConn) Write(func(uintptr) bool) error { return syscall.EINVAL }

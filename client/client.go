@@ -211,9 +211,6 @@ func (i *Display) SetDeleteIdHandler(f DisplayDeleteIdHandlerFunc) {
 func (i *Display) Dispatch(opcode uint32, fd int, data []byte) {
 	switch opcode {
 	case 0:
-		if i.errorHandler == nil {
-			return
-		}
 		var e DisplayErrorEvent
 		l := 0
 		e.ObjectId = i.Context().GetProxy(Uint32(data[l : l+4]))
@@ -225,7 +222,10 @@ func (i *Display) Dispatch(opcode uint32, fd int, data []byte) {
 		e.Message = String(data[l : l+messageLen])
 		l += messageLen
 
-		i.errorHandler(e)
+		i.Context().recordDisplayError(e)
+		if i.errorHandler != nil {
+			i.errorHandler(e)
+		}
 	case 1:
 		var e DisplayDeleteIdEvent
 		l := 0
@@ -237,6 +237,8 @@ func (i *Display) Dispatch(opcode uint32, fd int, data []byte) {
 		if i.deleteIdHandler != nil {
 			i.deleteIdHandler(e)
 		}
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -403,6 +405,8 @@ func (i *Registry) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.globalRemoveHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -466,6 +470,8 @@ func (i *Callback) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.doneHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -1586,6 +1592,8 @@ func (i *Shm) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.formatHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -1692,6 +1700,8 @@ func (i *Buffer) Dispatch(opcode uint32, fd int, data []byte) {
 		var e BufferReleaseEvent
 
 		i.releaseHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -2061,6 +2071,8 @@ func (i *DataOffer) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.actionHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -2400,6 +2412,8 @@ func (i *DataSource) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.actionHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -2806,6 +2820,8 @@ func (i *DataDevice) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.selectionHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -3716,6 +3732,8 @@ func (i *ShellSurface) Dispatch(opcode uint32, fd int, data []byte) {
 		var e ShellSurfacePopupDoneEvent
 
 		i.popupDoneHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -4549,6 +4567,8 @@ func (i *Surface) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.preferredBufferTransformHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -4843,6 +4863,8 @@ func (i *Seat) Dispatch(opcode uint32, fd int, data []byte) {
 		l += nameLen
 
 		i.nameHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -5691,6 +5713,8 @@ func (i *Pointer) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.axisRelativeDirectionHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -6118,6 +6142,8 @@ func (i *Keyboard) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.repeatInfoHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -6442,6 +6468,8 @@ func (i *Touch) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 
 		i.orientationHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
@@ -6970,6 +6998,8 @@ func (i *Output) Dispatch(opcode uint32, fd int, data []byte) {
 		l += descriptionLen
 
 		i.descriptionHandler(e)
+	default:
+		panic("client: unsupported opcode")
 	}
 }
 
