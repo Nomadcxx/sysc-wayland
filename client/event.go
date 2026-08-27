@@ -2,7 +2,9 @@ package client
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -14,70 +16,86 @@ var oobSpace = unix.CmsgSpace(4)
 
 func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byte, err error) {
 	fd = -1
+	var fds []int
+	fail := func(err error) (uint32, uint32, int, []byte, error) {
+		closeFDs(fds)
+		return 0, 0, -1, nil, err
+	}
 
-	oob := make([]byte, oobSpace)
 	header := make([]byte, 8)
-
-	n, oobn, _, _, err := ctx.conn.ReadMsgUnix(header, oob)
-	if err != nil {
-		return senderID, opcode, fd, msg, err
-	}
-	if n != 8 {
-		return senderID, opcode, fd, msg, fmt.Errorf("ctx.ReadMsg: incorrect number of bytes read for header (n=%d)", n)
-	}
-
-	if oobn > 0 {
-		fds, err := getFdsFromOob(oob, oobn, "header")
-		if err != nil {
-			return senderID, opcode, fd, msg, fmt.Errorf("ctx.ReadMsg: %w", err)
-		}
-
-		if len(fds) > 0 {
-			fd = fds[0]
-		}
+	if err := ctx.readExact(header, &fds); err != nil {
+		return fail(fmt.Errorf("ctx.ReadMsg: header: %w", err))
 	}
 
 	senderID = Uint32(header[:4])
 	opcodeAndSize := Uint32(header[4:8])
 	opcode = opcodeAndSize & 0xffff
 	size := opcodeAndSize >> 16
-
-	msgSize := int(size) - 8
-	if msgSize == 0 {
-		return senderID, opcode, fd, nil, nil
+	if senderID == 0 {
+		return fail(fmt.Errorf("ctx.ReadMsg: sender ID is zero"))
+	}
+	if size < 8 || size > 65535 {
+		return fail(fmt.Errorf("ctx.ReadMsg: invalid frame size %d", size))
+	}
+	if size%4 != 0 {
+		return fail(fmt.Errorf("ctx.ReadMsg: unaligned frame size %d", size))
 	}
 
+	msgSize := int(size - 8)
 	msg = make([]byte, msgSize)
-
-	if fd == -1 {
-		// if something was read before, then zero it out
-		if oobn > 0 {
-			oob = make([]byte, oobSpace)
+	if msgSize > 0 {
+		if err := ctx.readExact(msg, &fds); err != nil {
+			return fail(fmt.Errorf("ctx.ReadMsg: body: %w", err))
 		}
-
-		n, oobn, _, _, err = ctx.conn.ReadMsgUnix(msg, oob)
-	} else {
-		n, err = ctx.conn.Read(msg)
-	}
-	if err != nil {
-		return senderID, opcode, fd, msg, fmt.Errorf("ctx.ReadMsg: %w", err)
-	}
-	if n != msgSize {
-		return senderID, opcode, fd, msg, fmt.Errorf("ctx.ReadMsg: incorrect number of bytes read for msg (n=%d, msgSize=%d)", n, msgSize)
 	}
 
-	if fd == -1 && oobn > 0 {
-		fds, err := getFdsFromOob(oob, oobn, "msg")
-		if err != nil {
-			return senderID, opcode, fd, msg, fmt.Errorf("ctx.ReadMsg: %w", err)
-		}
-
-		if len(fds) > 0 {
-			fd = fds[0]
-		}
+	if len(fds) > 0 {
+		fd = fds[0]
 	}
 
 	return senderID, opcode, fd, msg, nil
+}
+
+func (ctx *Context) readExact(dst []byte, fds *[]int) error {
+	for len(dst) > 0 {
+		oob := make([]byte, oobSpace)
+		n, oobn, flags, _, readErr := ctx.conn.ReadMsgUnix(dst, oob)
+		if oobn > 0 {
+			received, err := getFdsFromOob(oob, oobn, "frame")
+			if err != nil {
+				return err
+			}
+			*fds = append(*fds, received...)
+		}
+		if flags&(unix.MSG_CTRUNC|unix.MSG_TRUNC) != 0 {
+			return fmt.Errorf("truncated socket message flags %#x", flags)
+		}
+		if n > len(dst) {
+			return fmt.Errorf("socket returned %d bytes for %d-byte buffer", n, len(dst))
+		}
+		if n > 0 {
+			dst = dst[n:]
+		}
+		if readErr != nil {
+			if len(dst) == 0 {
+				return nil
+			}
+			if errors.Is(readErr, io.EOF) {
+				return io.ErrUnexpectedEOF
+			}
+			return readErr
+		}
+		if n == 0 {
+			return io.ErrUnexpectedEOF
+		}
+	}
+	return nil
+}
+
+func closeFDs(fds []int) {
+	for _, fd := range fds {
+		_ = unix.Close(fd)
+	}
 }
 
 func getFdsFromOob(oob []byte, oobn int, source string) ([]int, error) {
