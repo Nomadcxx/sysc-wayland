@@ -402,7 +402,32 @@ go build ./...
 
 Expected: every command exits zero.
 
-**Step 2: Prove generator reproducibility**
+**Step 2: Record and commit the release candidate**
+
+Record the fragmented-read fix, descriptor handling, complete writes, object-map change, descriptor
+callback, removed cross-goroutine dispatch, and scanner import change in `UPSTREAM.md`. Link each entry to
+its focused check. Update `README.md` with the candidate's qualification commands.
+
+```bash
+git add README.md UPSTREAM.md
+git commit -m "docs: record sysc-wayland candidate"
+git status --short
+```
+
+Expected: the worktree is clean after the commit.
+
+**Step 3: Publish the release candidate**
+
+Push the candidate commit and prerelease tag so Go's module resolver can exercise the same commit that
+will become the final release:
+
+```bash
+git tag -a v0.1.0-rc.1 -m "sysc-wayland v0.1.0-rc.1"
+git push origin foundation/v0.1.0
+git push origin v0.1.0-rc.1
+```
+
+**Step 4: Prove generator reproducibility**
 
 Generate the `sysc-shell` xdg-shell package first. Generate layer-shell with
 `-xdg-shell-import` pointing at that package, then generate fractional-scale and viewporter. Run the four
@@ -411,37 +436,23 @@ commands twice in a temporary module under `/tmp` and compare each pair with `cm
 Use the release command shape below; do not use a local scanner binary or `replace` directive:
 
 ```bash
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0 -pkg xdgshell -o xdg_shell.go -i protocols/xdg-shell.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0 -pkg fractionalscale -o fractional_scale.go -i protocols/fractional-scale-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0 -pkg viewporter -o viewporter.go -i protocols/viewporter.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg xdgshell -o xdg_shell.go -i protocols/xdg-shell.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg fractionalscale -o fractional_scale.go -i protocols/fractional-scale-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg viewporter -o viewporter.go -i protocols/viewporter.xml
 ```
 
 Expected: all four comparisons exit zero and generated imports use `github.com/Nomadcxx/sysc-wayland/client`.
 
-**Step 3: Run a temporary live Niri probe**
+**Step 5: Run a temporary live Niri probe**
 
 Create the probe under `/tmp`, not this repository. It must connect, install a display-error handler, obtain the registry, perform two roundtrips, print `wl_output.name` values, and close without a protocol error.
 
 Expected: the output includes the active connector names and the process exits zero.
 
-**Step 4: Update the divergence ledger**
-
-Record the fragmented-read fix, descriptor handling, complete writes, object-map change, descriptor callback, removed cross-goroutine dispatch, and scanner import change. Link each entry to its focused check.
-
-**Step 5: Commit the release candidate**
-
-```bash
-git add README.md UPSTREAM.md
-git commit -m "docs: record sysc-wayland qualification"
-git status --short
-```
-
-Expected: the worktree is clean after the commit.
-
 **Step 6: Publish only after owner review**
 
-After the owner approves the diff and live evidence:
+After the owner approves the exact candidate commit and live evidence, promote that same commit:
 
 ```bash
 git tag -a v0.1.0 -m "sysc-wayland v0.1.0"
