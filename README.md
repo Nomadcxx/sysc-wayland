@@ -2,6 +2,8 @@
 
 `sysc-wayland` is the pure-Go Wayland foundation for the sysc projects. It owns wire framing, file-descriptor transfer, proxy lifecycle, core generated bindings, and protocol generation.
 
+The project targets Linux. It does not carry cross-platform transport abstractions or compositor policy.
+
 The project starts as a focused extraction from [`dankgo`](https://github.com/AvengeMedia/dankgo) at commit `10434658325c819efaf063f48eec4ae36555727e`. It does not import the rest of `dankgo`.
 
 No production package exists yet. The approved design and implementation plan are:
