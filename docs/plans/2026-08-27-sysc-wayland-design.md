@@ -1,7 +1,7 @@
 # sysc-wayland Architecture Design
 
 Date: 2026-08-27
-Status: Approved except for the project licence choice
+Status: Approved
 
 ## Purpose
 
@@ -17,8 +17,8 @@ The first release extracts the Wayland client and protocol scanner from `dankgo`
 - Initial language level: Go 1.26
 - Initial release: `v0.1.0`
 
-The owner must approve a project licence before Task 1. BSD-3-Clause is the smallest fit because both
-copied subtrees already use it; do not infer that choice from the upstream repository's root licence.
+The project uses BSD-3-Clause with `Copyright (c) 2026, Nomadcxx`. Copied subtrees retain their upstream
+notices and BSD-3-Clause licence files.
 
 The project uses its own module path. Consumers import it directly rather than using a local replacement for `dankgo`.
 

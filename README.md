@@ -10,3 +10,8 @@ No production package exists yet. The approved design and implementation plan ar
 - [Foundation implementation plan](docs/plans/2026-08-27-sysc-wayland-foundation.md)
 
 The first consumer will be [`sysc-shell`](https://github.com/Nomadcxx/sysc-shell).
+
+## Licence
+
+`sysc-wayland` uses the [BSD 3-Clause License](LICENSE). Extracted upstream code retains its copyright
+notices and subtree licences.

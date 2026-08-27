@@ -41,13 +41,11 @@ git -C /tmp/sysc-wayland-upstream rev-parse HEAD
 
 Expected: the final command prints `10434658325c819efaf063f48eec4ae36555727e`.
 
-**Step 2: Confirm the project licence**
+**Step 2: Confirm the project licence files**
 
-Obtain owner approval for the repository licence. Recommend BSD-3-Clause because the copied Wayland
-client and scanner already use that licence. Put the approved text in `LICENSE`; keep both upstream
-licence copies under `LICENSES/` even when the texts match.
-
-Do not continue without the owner decision.
+Keep the approved BSD-3-Clause project text in `LICENSE` with
+`Copyright (c) 2026, Nomadcxx`. Keep both upstream licence copies under `LICENSES/` even when their terms
+match the project licence.
 
 **Step 3: Initialise the module**
 
