@@ -1,19 +1,60 @@
 package client
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"unsafe"
 )
 
+var ErrPartialFrame = errors.New("client: partial Wayland frame write")
+
 func (ctx *Context) WriteMsg(b []byte, oob []byte) error {
-	n, oobn, err := ctx.conn.WriteMsgUnix(b, oob, nil)
+	return writeFrame(ctx.conn.WriteMsgUnix, ctx.conn.Write, b, oob)
+}
+
+type writeMsgUnixFunc func([]byte, []byte, *net.UnixAddr) (int, int, error)
+type writeFunc func([]byte) (int, error)
+
+func writeFrame(first writeMsgUnixFunc, write writeFunc, data, oob []byte) error {
+	n, oobn, err := first(data, oob, nil)
+	if n < 0 || n > len(data) {
+		return fmt.Errorf("%w: first write returned invalid byte count %d", ErrPartialFrame, n)
+	}
+	if oobn < 0 || oobn > len(oob) {
+		return fmt.Errorf("%w: first write returned invalid ancillary count %d", ErrPartialFrame, oobn)
+	}
+	accepted := n > 0 || oobn > 0
+	if oobn != len(oob) {
+		return fmt.Errorf("%w: ancillary write accepted %d of %d bytes", ErrPartialFrame, oobn, len(oob))
+	}
 	if err != nil {
+		if accepted {
+			return errors.Join(ErrPartialFrame, err)
+		}
 		return err
 	}
-	if n != len(b) || oobn != len(oob) {
-		return fmt.Errorf("ctx.WriteMsg: incorrect number of bytes written (n=%d oobn=%d)", n, oobn)
+	if n == 0 {
+		if accepted {
+			return errors.Join(ErrPartialFrame, io.ErrNoProgress)
+		}
+		return io.ErrNoProgress
 	}
 
+	for offset := n; offset < len(data); {
+		written, writeErr := write(data[offset:])
+		if written < 0 || written > len(data)-offset {
+			return fmt.Errorf("%w: plain write returned invalid byte count %d", ErrPartialFrame, written)
+		}
+		offset += written
+		if writeErr != nil {
+			return errors.Join(ErrPartialFrame, writeErr)
+		}
+		if written == 0 {
+			return errors.Join(ErrPartialFrame, io.ErrNoProgress)
+		}
+	}
 	return nil
 }
 

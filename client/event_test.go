@@ -214,6 +214,26 @@ func pendingBytes(conn *net.UnixConn) (int, error) {
 	return pending, errors.Join(controlErr, queryErr)
 }
 
+func writeAfterDrain(reader, peer *net.UnixConn, data []byte) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		for {
+			pending, err := pendingBytes(reader)
+			if err != nil {
+				done <- err
+				return
+			}
+			if pending == 0 {
+				_, err = peer.Write(data)
+				done <- err
+				return
+			}
+			runtime.Gosched()
+		}
+	}()
+	return done
+}
+
 func testFrame(sender, opcode uint32, body []byte) []byte {
 	frame := testHeader(sender, opcode, uint32(8+len(body)))
 	return append(frame, body...)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -12,7 +13,7 @@ import (
 	_ "unsafe"
 )
 
-var oobSpace = unix.CmsgSpace(4)
+var oobSpace = unix.CmsgSpace(2 * 4)
 
 func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byte, err error) {
 	fd = -1
@@ -49,17 +50,29 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 		}
 	}
 
-	if len(fds) > 0 {
+	if len(fds) > 1 {
+		// ponytail: generated dispatch supports one descriptor per message; add multi-FD generator
+		// output before lifting this ceiling.
+		return fail(fmt.Errorf("ctx.ReadMsg: supports at most one file descriptor, received %d", len(fds)))
+	}
+	if len(fds) == 1 {
 		fd = fds[0]
+		fds = nil
 	}
 
 	return senderID, opcode, fd, msg, nil
 }
 
 func (ctx *Context) readExact(dst []byte, fds *[]int) error {
+	return readExactWith(ctx.conn.ReadMsgUnix, dst, fds)
+}
+
+type readMsgUnixFunc func([]byte, []byte) (int, int, int, *net.UnixAddr, error)
+
+func readExactWith(read readMsgUnixFunc, dst []byte, fds *[]int) error {
 	for len(dst) > 0 {
 		oob := make([]byte, oobSpace)
-		n, oobn, flags, _, readErr := ctx.conn.ReadMsgUnix(dst, oob)
+		n, oobn, flags, _, readErr := read(dst, oob)
 		if oobn > 0 {
 			received, err := getFdsFromOob(oob, oobn, "frame")
 			if err != nil {
