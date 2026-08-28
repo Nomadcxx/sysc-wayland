@@ -8,7 +8,7 @@ The project starts as a focused extraction from [`dankgo`](https://github.com/Av
 commit `10434658325c819efaf063f48eec4ae36555727e`. It does not import the rest of `dankgo`. [UPSTREAM.md](UPSTREAM.md)
 records copied paths, licences, and local divergences.
 
-The foundation candidate provides the `client` package and the `sysc-wayland-scanner` command. The
+The v0.1.1 release provides the `client` package and the `sysc-wayland-scanner` command. The
 approved design and implementation plan are:
 
 - [Architecture design](docs/plans/2026-08-27-sysc-wayland-design.md)
@@ -16,7 +16,7 @@ approved design and implementation plan are:
 
 The first consumer will be [`sysc-shell`](https://github.com/Nomadcxx/sysc-shell).
 
-## Candidate qualification
+## Release qualification
 
 Run the repository gate from the module root:
 
@@ -28,17 +28,18 @@ go vet ./...
 go build ./...
 ```
 
-Test the published candidate from a temporary module containing the protocol XML files:
+Test the release from a clean directory containing the protocol XML files:
 
 ```bash
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg xdgshell -prefix xdg_ -o xdg_shell.go -i protocols/xdg-shell.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg fractionalscale -o fractional_scale.go -i protocols/fractional-scale-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg viewporter -o viewporter.go -i protocols/viewporter.xml
+go mod init example.invalid/probe
+mkdir -p xdgshell layershell fractionalscale viewporter
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.1 -pkg xdgshell -prefix xdg_ -o xdgshell/xdg_shell.go -i protocols/xdg-shell.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.1 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layershell/layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.1 -pkg fractionalscale -o fractionalscale/fractional_scale.go -i protocols/fractional-scale-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.1 -pkg viewporter -o viewporter/viewporter.go -i protocols/viewporter.xml
+go mod tidy
+go build ./...
 ```
-
-Do not use v0.1.0-rc.1. Its xdg-shell command omitted `-prefix xdg_`, so the generated layer-shell
-package did not compile against the generated xdg-shell package.
 
 ## Licence
 
