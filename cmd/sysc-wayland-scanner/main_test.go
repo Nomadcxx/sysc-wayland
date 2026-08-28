@@ -82,6 +82,33 @@ func TestScannerRecordsDisplayErrorBeforeHandler(t *testing.T) {
 	}
 }
 
+func TestScannerReproducesVendoredCoreBinding(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(repoRoot, "protocols", "wayland.xml")
+	output := filepath.Join(t.TempDir(), "client.go")
+	runScanner(t, "-pkg", "client", "-prefix", "wl", "-i", input, "-o", output)
+
+	got := normalizeXMLSource(readFile(t, output))
+	want := normalizeXMLSource(readFile(t, filepath.Join(repoRoot, "client", "client.go")))
+	if !bytes.Equal(got, want) {
+		t.Fatal("vendored core XML does not reproduce client/client.go")
+	}
+}
+
+func normalizeXMLSource(data []byte) []byte {
+	lines := bytes.Split(data, []byte("\n"))
+	for i, line := range lines {
+		if bytes.HasPrefix(line, []byte("// XML file : ")) {
+			lines[i] = []byte("// XML file : <source>")
+			break
+		}
+	}
+	return bytes.Join(lines, []byte("\n"))
+}
+
 func runScanner(t *testing.T, args ...string) {
 	t.Helper()
 	cmd := scannerCommand(args...)

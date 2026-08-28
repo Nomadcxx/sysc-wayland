@@ -14,15 +14,13 @@ their source XML.
 
 ## Core protocol XML
 
-- Source path: `/usr/share/wayland/wayland.xml`
-- Installed package: `wayland 1.26.0-1`
-- Upstream release: `1.26.0`
-- SHA-256: `cc860987e54f8d85c940e97fa1270c69b6e4ad31fbcf5a7f00107ce1157f5e07`
+- Vendored path: `protocols/wayland.xml`
+- Source: <https://gitlab.freedesktop.org/wayland/wayland/-/raw/1.24.0/protocol/wayland.xml?ref_type=tags>
+- Upstream release: `1.24.0`
+- SHA-256: `60abb5864546288a660f3d8af0c838fc87c85bb386582da23e52cb8476e9adbf`
 
-The v0.1.0 client binding remains on Wayland 1.24.0 to preserve the extracted API. The current scanner
-reproduces `client/client.go` byte-for-byte from the exact 1.24.0 source URL recorded in its generated
-header. The pinned 1.26.0 XML adds requests, events, errors, and formats; adopting it requires an explicit
-public API upgrade after v0.1.0.
+The vendored XML and `client/client.go` use Wayland 1.24.0. The scanner reproduces the checked binding
+from this local source; upgrading the protocol XML requires an explicit public API review.
 
 ## Divergences
 
