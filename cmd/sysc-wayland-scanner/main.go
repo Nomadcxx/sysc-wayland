@@ -448,8 +448,12 @@ func writeRequest(w io.Writer, ifaceName string, opcode int, r Request) {
 
 		case "array":
 			canBeConst = false
-			fmt.Fprintf(w, "%sLen := len(%s)\n", argNameLower, argNameLower)
-			sizes = append(sizes, fmt.Sprintf("%sLen", argNameLower))
+			if protocol.Name == "wayland" {
+				fmt.Fprintf(w, "%sLen := PaddedLen(len(%s))\n", argNameLower, argNameLower)
+			} else {
+				fmt.Fprintf(w, "%sLen := client.PaddedLen(len(%s))\n", argNameLower, argNameLower)
+			}
+			sizes = append(sizes, fmt.Sprintf("(4 + %sLen)", argNameLower))
 		}
 	}
 
@@ -567,7 +571,7 @@ func writeRequest(w io.Writer, ifaceName string, opcode int, r Request) {
 			} else {
 				fmt.Fprintf(w, "client.PutArray(_reqBuf[l:l+(4 + %sLen)], %s)\n", argNameLower, argNameLower)
 			}
-			fmt.Fprintf(w, "l += %sLen\n", argNameLower)
+			fmt.Fprintf(w, "l += (4 + %sLen)\n", argNameLower)
 
 		case "fd":
 			fdIndex = i

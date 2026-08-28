@@ -82,6 +82,26 @@ func TestScannerRecordsDisplayErrorBeforeHandler(t *testing.T) {
 	}
 }
 
+func TestScannerFramesArrayRequests(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "array.xml")
+	output := filepath.Join(dir, "array.go")
+	writeFixture(t, input, arrayRequestProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", output)
+	generated := readFile(t, output)
+	for _, want := range [][]byte{
+		[]byte("valuesLen := client.PaddedLen(len(values))"),
+		[]byte("_reqBufLen := 8 + (4 + valuesLen)"),
+		[]byte("client.PutArray(_reqBuf[l:l+(4+valuesLen)], values)"),
+		[]byte("l += (4 + valuesLen)"),
+	} {
+		if !bytes.Contains(generated, want) {
+			t.Fatalf("generated array request does not contain %q:\n%s", want, generated)
+		}
+	}
+}
+
 func TestScannerReproducesVendoredCoreBinding(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -171,6 +191,17 @@ const displayErrorProtocol = `<?xml version="1.0" encoding="UTF-8"?>
       <arg name="code" type="uint"/>
       <arg name="message" type="string"/>
     </event>
+  </interface>
+</protocol>
+`
+
+const arrayRequestProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fixture">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="array_widget" version="1">
+    <request name="set_values">
+      <arg name="values" type="array"/>
+    </request>
   </interface>
 </protocol>
 `
