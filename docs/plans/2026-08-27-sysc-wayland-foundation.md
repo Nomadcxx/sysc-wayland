@@ -421,10 +421,13 @@ Expected: the worktree is clean after the commit.
 Push the candidate commit and prerelease tag so Go's module resolver can exercise the same commit that
 will become the final release:
 
+`v0.1.0-rc.1` is rejected. Its qualification command omitted `-prefix xdg_`, so layer-shell referenced
+`xdg_shell.Popup` while xdg-shell generated `XdgPopup`. Keep the tag for provenance and use rc.2.
+
 ```bash
-git tag -a v0.1.0-rc.1 -m "sysc-wayland v0.1.0-rc.1"
+git tag -a v0.1.0-rc.2 -m "sysc-wayland v0.1.0-rc.2"
 git push origin foundation/v0.1.0
-git push origin v0.1.0-rc.1
+git push origin v0.1.0-rc.2
 ```
 
 **Step 4: Prove generator reproducibility**
@@ -436,10 +439,10 @@ commands twice in a temporary module under `/tmp` and compare each pair with `cm
 Use the release command shape below; do not use a local scanner binary or `replace` directive:
 
 ```bash
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg xdgshell -o xdg_shell.go -i protocols/xdg-shell.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg fractionalscale -o fractional_scale.go -i protocols/fractional-scale-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg viewporter -o viewporter.go -i protocols/viewporter.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg xdgshell -prefix xdg_ -o xdg_shell.go -i protocols/xdg-shell.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg fractionalscale -o fractional_scale.go -i protocols/fractional-scale-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg viewporter -o viewporter.go -i protocols/viewporter.xml
 ```
 
 Expected: all four comparisons exit zero and generated imports use `github.com/Nomadcxx/sysc-wayland/client`.

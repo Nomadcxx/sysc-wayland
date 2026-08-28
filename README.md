@@ -31,11 +31,14 @@ go build ./...
 Test the published candidate from a temporary module containing the protocol XML files:
 
 ```bash
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg xdgshell -o xdg_shell.go -i protocols/xdg-shell.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg fractionalscale -o fractional_scale.go -i protocols/fractional-scale-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.1 -pkg viewporter -o viewporter.go -i protocols/viewporter.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg xdgshell -prefix xdg_ -o xdg_shell.go -i protocols/xdg-shell.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg fractionalscale -o fractional_scale.go -i protocols/fractional-scale-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.1.0-rc.2 -pkg viewporter -o viewporter.go -i protocols/viewporter.xml
 ```
+
+Do not use v0.1.0-rc.1. Its xdg-shell command omitted `-prefix xdg_`, so the generated layer-shell
+package did not compile against the generated xdg-shell package.
 
 ## Licence
 
