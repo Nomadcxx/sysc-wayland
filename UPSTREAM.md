@@ -22,6 +22,18 @@ their source XML.
 The vendored XML and `client/client.go` use Wayland 1.24.0. The scanner reproduces the checked binding
 from this local source; upgrading the protocol XML requires an explicit public API review.
 
+## Additional protocol XML
+
+Vendored from wayland-protocols tag 1.45:
+
+| Path | Upstream | SHA-256 |
+|---|---|---|
+| `protocols/text-input-unstable-v3.xml` | `unstable/text-input/text-input-unstable-v3.xml` | `2d08f2cddb463e169c23f1c34769de12ae255540e51ee8f515b54667d60b90ba` |
+| `protocols/cursor-shape-v1.xml` | `staging/cursor-shape/cursor-shape-v1.xml` | `bb57d91e53a79dadab7c612dab87c233393cee73673feefa7442cfbfdd9aed2f` |
+| `protocols/tablet-v2.xml` | `unstable/tablet/tablet-unstable-v2.xml` | `db291b574adb2d42d27f3d01a77723bb3350a7a32e6d33de16513521b42294a9` |
+
+`tablet-v2.xml` is present because cursor-shape-v1 `get_tablet_tool_v2` takes a `zwp_tablet_tool_v2`.
+
 ## Divergences
 
 | Commit | Invariant | Check | Upstream status |
