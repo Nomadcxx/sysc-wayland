@@ -1077,19 +1077,15 @@ func (i *ZwpTabletToolV2) Dispatch(opcode uint32, fd int, data []byte) {
 		tabletID := client.Uint32(data[l : l+4])
 		if tablet, ok := i.Context().GetProxy(tabletID).(*ZwpTabletV2); ok && !tablet.IsZombie() {
 			e.Tablet = tablet
-		} else if tabletID != 0 {
-			tablet := &ZwpTabletV2{}
-			i.Context().RegisterWithID(tablet, tabletID)
-			e.Tablet = tablet
+		} else {
+			e.Tablet = nil
 		}
 		l += 4
 		surfaceID := client.Uint32(data[l : l+4])
 		if surface, ok := i.Context().GetProxy(surfaceID).(*client.Surface); ok && !surface.IsZombie() {
 			e.Surface = surface
-		} else if surfaceID != 0 {
-			surface := &client.Surface{}
-			i.Context().RegisterWithID(surface, surfaceID)
-			e.Surface = surface
+		} else {
+			e.Surface = nil
 		}
 		l += 4
 
@@ -2633,19 +2629,15 @@ func (i *ZwpTabletPadV2) Dispatch(opcode uint32, fd int, data []byte) {
 		tabletID := client.Uint32(data[l : l+4])
 		if tablet, ok := i.Context().GetProxy(tabletID).(*ZwpTabletV2); ok && !tablet.IsZombie() {
 			e.Tablet = tablet
-		} else if tabletID != 0 {
-			tablet := &ZwpTabletV2{}
-			i.Context().RegisterWithID(tablet, tabletID)
-			e.Tablet = tablet
+		} else {
+			e.Tablet = nil
 		}
 		l += 4
 		surfaceID := client.Uint32(data[l : l+4])
 		if surface, ok := i.Context().GetProxy(surfaceID).(*client.Surface); ok && !surface.IsZombie() {
 			e.Surface = surface
-		} else if surfaceID != 0 {
-			surface := &client.Surface{}
-			i.Context().RegisterWithID(surface, surfaceID)
-			e.Surface = surface
+		} else {
+			e.Surface = nil
 		}
 		l += 4
 
@@ -2661,10 +2653,8 @@ func (i *ZwpTabletPadV2) Dispatch(opcode uint32, fd int, data []byte) {
 		surfaceID := client.Uint32(data[l : l+4])
 		if surface, ok := i.Context().GetProxy(surfaceID).(*client.Surface); ok && !surface.IsZombie() {
 			e.Surface = surface
-		} else if surfaceID != 0 {
-			surface := &client.Surface{}
-			i.Context().RegisterWithID(surface, surfaceID)
-			e.Surface = surface
+		} else {
+			e.Surface = nil
 		}
 		l += 4
 

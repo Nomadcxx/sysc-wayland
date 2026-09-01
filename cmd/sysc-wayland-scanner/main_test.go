@@ -205,3 +205,78 @@ const arrayRequestProtocol = `<?xml version="1.0" encoding="UTF-8"?>
   </interface>
 </protocol>
 `
+
+// An object argument in an event references an object that already exists.
+// Binding a fresh proxy to its id is wrong twice over: the id belongs to
+// whoever created the object, and when the client created it the id is in the
+// client range, which RegisterWithID rejects with a panic. A wl_pointer.leave
+// naming a surface this client has just destroyed then takes the whole
+// connection down rather than being ignored.
+//
+// A new_id argument is the server creating an object and must still register.
+func TestScannerDoesNotRegisterObjectArguments(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "objects.xml")
+	out := filepath.Join(dir, "objects.go")
+	writeFixture(t, input, objectArgProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", out)
+	data := readFile(t, out)
+
+	leave, ok := eventBody(string(data), "case 1:")
+	if !ok {
+		t.Fatal("generated dispatcher has no opcode 1 branch")
+	}
+	if strings.Contains(leave, "RegisterWithID") {
+		t.Fatalf("an object argument still registers a proxy:\n%s", leave)
+	}
+	if !strings.Contains(leave, "e.Surface = nil") {
+		t.Fatalf("an unresolved object argument does not clear its field:\n%s", leave)
+	}
+
+	created, ok := eventBody(string(data), "case 0:")
+	if !ok {
+		t.Fatal("generated dispatcher has no opcode 0 branch")
+	}
+	if !strings.Contains(created, "RegisterWithID") {
+		t.Fatalf("a new_id argument no longer registers its proxy:\n%s", created)
+	}
+
+	if _, err := parser.ParseFile(token.NewFileSet(), out, data, parser.AllErrors); err != nil {
+		t.Fatalf("parse generated output: %v", err)
+	}
+}
+
+// eventBody returns the generated source between one opcode branch and the
+// next, so a test can assert on one event without matching the whole file.
+func eventBody(source, branch string) (string, bool) {
+	start := strings.Index(source, branch)
+	if start < 0 {
+		return "", false
+	}
+	rest := source[start+len(branch):]
+	if end := strings.Index(rest, "\tcase "); end >= 0 {
+		return rest[:end], true
+	}
+	return rest, true
+}
+
+const objectArgProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fixture">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="fixture_offer" version="1">
+    <request name="destroy" type="destructor"/>
+  </interface>
+  <interface name="fixture_surface" version="1">
+    <request name="destroy" type="destructor"/>
+  </interface>
+  <interface name="fixture_seat" version="1">
+    <event name="offered">
+      <arg name="id" type="new_id" interface="fixture_offer"/>
+    </event>
+    <event name="left">
+      <arg name="surface" type="object" interface="fixture_surface"/>
+    </event>
+  </interface>
+</protocol>
+`

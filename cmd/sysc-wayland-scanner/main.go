@@ -764,10 +764,25 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 					}
 					fmt.Fprintf(w, "if %s, ok := i.Context().GetProxy(%sID).(*%s); ok && !%s.IsZombie() {\n", argNameLower, argNameLower, argIface, argNameLower)
 					fmt.Fprintf(w, "e.%s = %s\n", argName, argNameLower)
-					fmt.Fprintf(w, "} else if %sID != 0 {\n", argNameLower)
-					fmt.Fprintf(w, "%s := &%s{}\n", argNameLower, argIface)
-					fmt.Fprintf(w, "i.Context().RegisterWithID(%s, %sID)\n", argNameLower, argNameLower)
-					fmt.Fprintf(w, "e.%s = %s\n", argName, argNameLower)
+					if arg.Type == "new_id" {
+						// A new_id argument is the server creating an object,
+						// so its id comes from the server range and binding a
+						// fresh proxy to it is correct.
+						fmt.Fprintf(w, "} else if %sID != 0 {\n", argNameLower)
+						fmt.Fprintf(w, "%s := &%s{}\n", argNameLower, argIface)
+						fmt.Fprintf(w, "i.Context().RegisterWithID(%s, %sID)\n", argNameLower, argNameLower)
+						fmt.Fprintf(w, "e.%s = %s\n", argName, argNameLower)
+					} else {
+						// An object argument references an object that already
+						// exists. A miss or a zombie means this client destroyed
+						// it and the event is about something gone, so the field
+						// stays nil. Registering here would bind a proxy to a
+						// client-allocated id, which RegisterWithID rejects: a
+						// wl_pointer.leave naming a just-destroyed surface would
+						// take down the whole connection.
+						fmt.Fprintf(w, "} else {\n")
+						fmt.Fprintf(w, "e.%s = nil\n", argName)
+					}
 					fmt.Fprintf(w, "}\n")
 				} else {
 					if protocol.Name == "wayland" {
