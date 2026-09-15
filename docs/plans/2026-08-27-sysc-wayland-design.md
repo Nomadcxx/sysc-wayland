@@ -83,11 +83,12 @@ The reader:
 5. returns one frame or a descriptive error;
 6. closes file descriptors that cannot be represented or delivered, including every error after receipt.
 
-The ancillary buffer holds two descriptors so the reader can detect one descriptor beyond the supported
-limit. Version one accepts at most one file descriptor per message because the extracted generated
-dispatcher accepts one descriptor. A `ponytail:` comment records that ceiling and names multi-FD
-generator support as the upgrade path. `MSG_CTRUNC` is fatal even when the kernel closes descriptors that
-did not fit the buffer.
+The reader queues received descriptors in arrival order because one `sendmsg` may contain several
+coalesced Wayland frames. `ReadMsg` returns one queued descriptor per call. Generated dispatchers expose
+`HasFD(opcode)` so `Dispatch` consumes a descriptor only for an FD-bearing event and leaves it queued
+across non-FD events. The public event API still represents one descriptor per event; a protocol event
+with multiple FD arguments needs a separate API change. The ancillary buffer is sized for 256 descriptors
+and `MSG_CTRUNC` is fatal even when the kernel closes descriptors that did not fit the buffer.
 
 The writer sends ancillary rights once with the first accepted data byte, then writes any remaining bytes without repeating the rights. A partial request followed by an error makes the connection unusable and returns a fatal error.
 
@@ -160,7 +161,8 @@ Socket-pair checks cover:
 - EOF during a header or body;
 - invalid size and alignment;
 - one received file descriptor;
-- excess descriptor rejection without leaks;
+- coalesced descriptors in order, including an FD-bearing event after a non-FD event;
+- unclaimed descriptor cleanup on EOF, fatal dispatch, and context close;
 - ancillary truncation rejection;
 - short writes with and without a descriptor;
 - object registration and deletion;
