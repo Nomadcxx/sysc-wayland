@@ -59,6 +59,72 @@ func TestDispatchOwnershipDiscardsZombieAndClosesFD(t *testing.T) {
 	assertPipeReadEndClosed(t, pipe)
 }
 
+func TestDispatchPreservesQueuedFDForNonFDEvent(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	var received []int
+	proxy := &testDispatcher{
+		hasFD: func(opcode uint32) bool { return opcode == 1 },
+		dispatch: func(_ uint32, fd int, _ []byte) {
+			received = append(received, fd)
+		},
+	}
+	ctx.Register(proxy)
+	pipe := newPipe(t)
+	frames := append(testFrame(proxy.ID(), 0, nil), testFrame(proxy.ID(), 1, nil)...)
+	if _, _, err := peer.WriteMsgUnix(frames, unix.UnixRights(pipe.read), nil); err != nil {
+		t.Fatal(err)
+	}
+	pipe.closeRead(t)
+
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("first Dispatch() error = %v", err)
+	}
+	if len(received) != 1 || received[0] != -1 {
+		t.Fatalf("first dispatched descriptors = %v, want [-1]", received)
+	}
+
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("second Dispatch() error = %v", err)
+	}
+	if len(received) != 2 || received[1] < 0 {
+		t.Fatalf("second dispatched descriptors = %v, want a descriptor", received)
+	}
+	fd := received[1]
+	t.Cleanup(func() { unix.Close(fd) })
+	if _, err := unix.Write(pipe.write, []byte{'x'}); err != nil {
+		t.Fatal(err)
+	}
+	var got [1]byte
+	if _, err := unix.Read(fd, got[:]); err != nil {
+		t.Fatal(err)
+	}
+	if got[0] != 'x' {
+		t.Fatalf("received byte = %q, want x", got[0])
+	}
+}
+
+func TestDispatchClosesQueuedFDsWhenFirstFrameIsFatal(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	first := newPipe(t)
+	second := newPipe(t)
+	frames := append(testFrame(77, 0, nil), testFrame(77, 0, nil)...)
+	if _, _, err := peer.WriteMsgUnix(frames, unix.UnixRights(first.read, second.read), nil); err != nil {
+		t.Fatal(err)
+	}
+	first.closeRead(t)
+	second.closeRead(t)
+
+	err := ctx.Dispatch()
+	if !errors.Is(err, ErrDispatchSenderNotFound) {
+		t.Fatalf("Dispatch() error = %v, want ErrDispatchSenderNotFound", err)
+	}
+	for name, writeFD := range map[string]int{"first": first.write, "second": second.write} {
+		if _, err := unix.Write(writeFD, []byte{'x'}); !errors.Is(err, unix.EPIPE) {
+			t.Errorf("write to %s pipe error = %v, want EPIPE", name, err)
+		}
+	}
+}
+
 func TestDispatchOwnershipMakesDecoderPanicSticky(t *testing.T) {
 	ctx, peer := socketPairContext(t)
 	proxy := &testDispatcher{dispatch: func(uint32, int, []byte) { panic("bad decoder") }}
@@ -144,12 +210,20 @@ func TestGeneratedDispatchRejectsUnknownOpcode(t *testing.T) {
 type testDispatcher struct {
 	BaseProxy
 	dispatch func(uint32, int, []byte)
+	hasFD    func(uint32) bool
 }
 
 func (p *testDispatcher) Dispatch(opcode uint32, fd int, data []byte) {
 	if p.dispatch != nil {
 		p.dispatch(opcode, fd, data)
 	}
+}
+
+func (p *testDispatcher) HasFD(opcode uint32) bool {
+	if p.hasFD == nil {
+		return true
+	}
+	return p.hasFD(opcode)
 }
 
 func sendFDFrame(t *testing.T, peer *net.UnixConn, sender, opcode uint32, body []byte) *testPipe {

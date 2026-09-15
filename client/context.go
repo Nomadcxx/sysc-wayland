@@ -16,9 +16,10 @@ const firstServerID = uint32(0xff000000)
 type Context struct {
 	conn *net.UnixConn
 	// ponytail: one goroutine owns this map; add locking only if the public ownership contract changes.
-	objects   map[uint32]Proxy
-	currentID uint32
-	fatalErr  error
+	objects    map[uint32]Proxy
+	currentID  uint32
+	fatalErr   error
+	pendingFDs []int
 }
 
 func (ctx *Context) Register(p Proxy) {
@@ -71,6 +72,8 @@ func (ctx *Context) lookupProxy(id uint32) (Proxy, bool) {
 }
 
 func (ctx *Context) Close() error {
+	closeFDs(ctx.pendingFDs)
+	ctx.pendingFDs = nil
 	return ctx.conn.Close()
 }
 
@@ -118,6 +121,10 @@ func (ctx *Context) Dispatch() (dispatchErr error) {
 		closeReceivedFD(fd)
 		return ctx.setFatal(fmt.Errorf("%w (senderID=%d)", ErrDispatchSenderNotFound, senderID))
 	}
+	if fdDispatcher, ok := proxy.(FDDispatcher); ok && !fdDispatcher.HasFD(opcode) {
+		ctx.putBackFD(fd)
+		fd = -1
+	}
 	if proxy.IsZombie() {
 		closeReceivedFD(fd)
 		return nil
@@ -149,8 +156,19 @@ var ErrDispatchUnableToReadMsg = errors.New("dispatch: unable to read msg")
 func (ctx *Context) setFatal(err error) error {
 	if ctx.fatalErr == nil {
 		ctx.fatalErr = err
+		closeFDs(ctx.pendingFDs)
+		ctx.pendingFDs = nil
 	}
 	return ctx.fatalErr
+}
+
+// putBackFD restores a descriptor that belongs to a later protocol event.
+// ponytail: prepending is O(n); descriptor batches are bounded by the socket ancillary buffer, so a ring is unnecessary until that bound grows.
+func (ctx *Context) putBackFD(fd int) {
+	if fd < 0 {
+		return
+	}
+	ctx.pendingFDs = append([]int{fd}, ctx.pendingFDs...)
 }
 
 func (ctx *Context) recordDisplayError(event DisplayErrorEvent) {

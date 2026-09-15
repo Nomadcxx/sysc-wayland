@@ -13,21 +13,23 @@ import (
 	_ "unsafe"
 )
 
-var oobSpace = unix.CmsgSpace(2 * 4)
+// Linux permits at most 253 descriptors in one SCM_RIGHTS message. Keep one
+// spare slot for coalesced Wayland frames while retaining truncation checks.
+const maxFDsPerControlMessage = 256
+
+var oobSpace = unix.CmsgSpace(maxFDsPerControlMessage * 4)
 
 func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byte, err error) {
 	if ctx.fatalErr != nil {
 		return 0, 0, -1, nil, ctx.fatalErr
 	}
 	fd = -1
-	var fds []int
 	fail := func(err error) (uint32, uint32, int, []byte, error) {
-		closeFDs(fds)
 		return 0, 0, -1, nil, ctx.setFatal(err)
 	}
 
 	header := make([]byte, 8)
-	if err := ctx.readExact(header, &fds); err != nil {
+	if err := ctx.readExact(header); err != nil {
 		return fail(fmt.Errorf("ctx.ReadMsg: header: %w", err))
 	}
 
@@ -48,33 +50,38 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 	msgSize := int(size - 8)
 	msg = make([]byte, msgSize)
 	if msgSize > 0 {
-		if err := ctx.readExact(msg, &fds); err != nil {
+		if err := ctx.readExact(msg); err != nil {
 			return fail(fmt.Errorf("ctx.ReadMsg: body: %w", err))
 		}
 	}
 
-	if len(fds) > 1 {
-		// ponytail: generated dispatch supports one descriptor per message; add multi-FD generator
-		// output before lifting this ceiling.
-		return fail(fmt.Errorf("ctx.ReadMsg: supports at most one file descriptor, received %d", len(fds)))
-	}
-	if len(fds) == 1 {
-		fd = fds[0]
-		fds = nil
-	}
+	fd = ctx.takeFD()
 
 	return senderID, opcode, fd, msg, nil
 }
 
-func (ctx *Context) readExact(dst []byte, fds *[]int) error {
-	return readExactWith(ctx.conn.ReadMsgUnix, dst, fds)
+func (ctx *Context) readExact(dst []byte) error {
+	return readExactWith(ctx.conn.ReadMsgUnix, dst, &ctx.pendingFDs)
+}
+
+func (ctx *Context) takeFD() int {
+	if len(ctx.pendingFDs) == 0 {
+		return -1
+	}
+	fd := ctx.pendingFDs[0]
+	ctx.pendingFDs[0] = -1
+	ctx.pendingFDs = ctx.pendingFDs[1:]
+	if len(ctx.pendingFDs) == 0 {
+		ctx.pendingFDs = nil
+	}
+	return fd
 }
 
 type readMsgUnixFunc func([]byte, []byte) (int, int, int, *net.UnixAddr, error)
 
 func readExactWith(read readMsgUnixFunc, dst []byte, fds *[]int) error {
+	oob := make([]byte, oobSpace)
 	for len(dst) > 0 {
-		oob := make([]byte, oobSpace)
 		n, oobn, flags, _, readErr := read(dst, oob)
 		if oobn > 0 {
 			received, err := getFdsFromOob(oob, oobn, "frame")
@@ -118,7 +125,7 @@ func getFdsFromOob(oob []byte, oobn int, source string) ([]int, error) {
 	if oobn > len(oob) {
 		return nil, fmt.Errorf("getFdsFromOob: incorrect number of bytes read from %s for oob (oobn=%d)", source, oobn)
 	}
-	scms, err := unix.ParseSocketControlMessage(oob)
+	scms, err := unix.ParseSocketControlMessage(oob[:oobn])
 	if err != nil {
 		return nil, fmt.Errorf("getFdsFromOob: unable to parse control message from %s: %w", source, err)
 	}
