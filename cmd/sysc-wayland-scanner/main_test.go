@@ -40,6 +40,25 @@ func TestScannerUsesSyscClientAndIsReproducible(t *testing.T) {
 	}
 }
 
+func TestScannerEmitsFDRequirements(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "fd.xml")
+	output := filepath.Join(dir, "fd.go")
+	writeFixture(t, input, fdProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", output)
+	generated := readFile(t, output)
+	for _, want := range [][]byte{
+		[]byte("func (i *FixtureSource) HasFD(opcode uint32) bool"),
+		[]byte("case 0:\n\t\treturn true"),
+		[]byte("default:\n\t\treturn false"),
+	} {
+		if !bytes.Contains(generated, want) {
+			t.Fatalf("generated FD requirements do not contain %q:\n%s", want, generated)
+		}
+	}
+}
+
 func TestScannerRequiresExplicitXDGImport(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "xdg.xml")
@@ -164,6 +183,20 @@ const simpleProtocol = `<?xml version="1.0" encoding="UTF-8"?>
   <copyright>Fixture copyright.</copyright>
   <interface name="fixture_widget" version="1">
     <request name="destroy" type="destructor"/>
+    <event name="done">
+      <arg name="serial" type="uint"/>
+    </event>
+  </interface>
+</protocol>
+`
+
+const fdProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fixture">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="fixture_source" version="1">
+    <event name="send">
+      <arg name="fd" type="fd"/>
+    </event>
     <event name="done">
       <arg name="serial" type="uint"/>
     </event>

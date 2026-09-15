@@ -705,6 +705,35 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 		return
 	}
 
+	hasFD := false
+	for _, e := range v.Events {
+		for _, arg := range e.Args {
+			if arg.Type == "fd" {
+				hasFD = true
+				break
+			}
+		}
+	}
+	fmt.Fprintf(w, "func (i *%s) HasFD(opcode uint32) bool {\n", ifaceName)
+	if !hasFD {
+		fmt.Fprintf(w, "return false\n")
+	} else {
+		fmt.Fprintf(w, "switch opcode {\n")
+		for i, e := range v.Events {
+			for _, arg := range e.Args {
+				if arg.Type == "fd" {
+					fmt.Fprintf(w, "case %d:\n", i)
+					fmt.Fprintf(w, "return true\n")
+					break
+				}
+			}
+		}
+		fmt.Fprintf(w, "default:\n")
+		fmt.Fprintf(w, "return false\n")
+		fmt.Fprintf(w, "}\n")
+	}
+	fmt.Fprintf(w, "}\n")
+
 	fmt.Fprintf(w, "func (i *%s) Dispatch(opcode uint32, fd int, data []byte) {\n", ifaceName)
 	fmt.Fprintf(w, "switch opcode {\n")
 	for i, e := range v.Events {
