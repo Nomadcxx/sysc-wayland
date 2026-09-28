@@ -10,10 +10,7 @@ records copied paths, licences, and local divergences.
 
 The v0.2.0 release adds generated `textinput` and `cursorshape` packages (text-input-v3 and
 cursor-shape-v1, with tablet-v2 types required by cursor-shape). The `client` package and
-`sysc-wayland-scanner` remain the foundation. The approved design and implementation plan are:
-
-- [Architecture design](docs/plans/2026-08-27-sysc-wayland-design.md)
-- [Foundation implementation plan](docs/plans/2026-08-27-sysc-wayland-foundation.md)
+`sysc-wayland-scanner` remain the foundation.
 
 The first consumer will be [`sysc-shell`](https://github.com/Nomadcxx/sysc-shell).
 
