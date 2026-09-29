@@ -10,7 +10,11 @@ records copied paths, licences, and local divergences.
 
 The v0.2.0 release adds generated `textinput` and `cursorshape` packages (text-input-v3 and
 cursor-shape-v1, with tablet-v2 types required by cursor-shape). The `client` package and
-`sysc-wayland-scanner` remain the foundation.
+`sysc-wayland-scanner` remain the foundation. The v0.3.0 release adds the generated `idle`
+package (ext-idle-notify-v1, staging, wayland-protocols 1.49).
+
+The v0.2.2 release queues coalesced Wayland file descriptors and generates opcode metadata so FD
+events remain correctly associated when non-FD events share a socket read.
 
 The first consumer will be [`sysc-shell`](https://github.com/Nomadcxx/sysc-shell).
 
@@ -31,13 +35,13 @@ Test the release from a clean directory containing the protocol XML files:
 ```bash
 go mod init example.invalid/probe
 mkdir -p xdgshell layershell fractionalscale viewporter textinput cursorshape
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.0 -pkg xdgshell -prefix xdg_ -o xdgshell/xdg_shell.go -i protocols/xdg-shell.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.0 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layershell/layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.0 -pkg fractionalscale -o fractionalscale/fractional_scale.go -i protocols/fractional-scale-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.0 -pkg viewporter -o viewporter/viewporter.go -i protocols/viewporter.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.0 -pkg textinput -o textinput/text_input.go -i protocols/text-input-unstable-v3.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.0 -pkg cursorshape -o cursorshape/cursor_shape.go -i protocols/cursor-shape-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.0 -pkg cursorshape -o cursorshape/tablet_v2.go -i protocols/tablet-v2.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg xdgshell -prefix xdg_ -o xdgshell/xdg_shell.go -i protocols/xdg-shell.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layershell/layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg fractionalscale -o fractionalscale/fractional_scale.go -i protocols/fractional-scale-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg viewporter -o viewporter/viewporter.go -i protocols/viewporter.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg textinput -o textinput/text_input.go -i protocols/text-input-unstable-v3.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg cursorshape -o cursorshape/cursor_shape.go -i protocols/cursor-shape-v1.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg cursorshape -o cursorshape/tablet_v2.go -i protocols/tablet-v2.xml
 go mod tidy
 go build ./...
 ```

@@ -6,6 +6,13 @@ type Dispatcher interface {
 	Dispatch(opcode uint32, fd int, data []byte)
 }
 
+// FDDispatcher reports whether an opcode consumes a received file descriptor.
+// It is optional so existing custom dispatchers keep the original ownership
+// behavior; generated dispatchers implement it for protocol-aware routing.
+type FDDispatcher interface {
+	HasFD(opcode uint32) bool
+}
+
 type Proxy interface {
 	Context() *Context
 	SetContext(ctx *Context)

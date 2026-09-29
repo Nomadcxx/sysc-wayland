@@ -43,3 +43,5 @@ Vendored from wayland-protocols tag 1.45:
 | `2d9acb8` | Reads retain one descriptor across fragments; writes send rights once and complete short writes. | `go test ./client -run 'TestReadFrame.*FD\|TestWriteFrame'` | Local divergence |
 | `47068e9` | `ControlFD` scopes descriptor access; dispatch stays on the owner goroutine and makes fatal errors sticky. | `go test ./client -run 'TestControlFD\|TestDispatchOwnership'` | Local divergence |
 | `23e960c` | The scanner emits the sysc client import, requires explicit external xdg-shell imports, and preserves fatal dispatch behavior. | `go test ./cmd/sysc-wayland-scanner` | Local divergence |
+| `405b74c` | Coalesced received descriptors are queued in order and drained on EOF, fatal dispatch, or context close. | `go test -race -count=1 -p 1 github.com/Nomadcxx/sysc-wayland/client` | Local divergence |
+| `56eccce` | Generated dispatchers report FD-bearing opcodes so queued rights survive intervening non-FD events. | `go test -race -count=1 -p 1 github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner` | Local divergence |
