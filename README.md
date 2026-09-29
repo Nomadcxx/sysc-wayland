@@ -10,7 +10,8 @@ records copied paths, licences, and local divergences.
 
 The v0.2.0 release adds generated `textinput` and `cursorshape` packages (text-input-v3 and
 cursor-shape-v1, with tablet-v2 types required by cursor-shape). The `client` package and
-`sysc-wayland-scanner` remain the foundation. The approved design and implementation plan are:
+`sysc-wayland-scanner` remain the foundation. The v0.3.0 release adds the generated `idle`
+package (ext-idle-notify-v1, staging, wayland-protocols 1.49). The approved design and implementation plan are:
 
 - [Architecture design](docs/plans/2026-08-27-sysc-wayland-design.md)
 - [Foundation implementation plan](docs/plans/2026-08-27-sysc-wayland-foundation.md)
