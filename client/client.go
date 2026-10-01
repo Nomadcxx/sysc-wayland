@@ -6120,7 +6120,7 @@ func (i *Keyboard) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 		e.Keys = make([]byte, keysLen)
 		copy(e.Keys, data[l:l+keysLen])
-		l += keysLen
+		l += PaddedLen(keysLen)
 
 		i.enterHandler(e)
 	case 2:
