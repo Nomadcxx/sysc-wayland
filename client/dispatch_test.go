@@ -182,6 +182,31 @@ func TestDispatchOwnershipRecordsDisplayErrorBeforeHandler(t *testing.T) {
 	}
 }
 
+func TestFixesDestroyRegistryDiscardsInFlightEvents(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	fixes := NewFixes(ctx)
+	registry := NewRegistry(ctx)
+	called := false
+	registry.SetGlobalHandler(func(RegistryGlobalEvent) { called = true })
+
+	if err := fixes.DestroyRegistry(registry); err != nil {
+		t.Fatalf("DestroyRegistry() error = %v", err)
+	}
+	body := make([]byte, 4+4+PaddedLen(len("wl_output")+1)+4)
+	PutUint32(body[:4], 42)
+	PutString(body[4:], "wl_output")
+	PutUint32(body[4+4+PaddedLen(len("wl_output")+1):], 4)
+	if _, err := peer.Write(testFrame(registry.ID(), 0, body)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("Dispatch() error = %v", err)
+	}
+	if !registry.IsZombie() || called {
+		t.Fatalf("registry zombie/handler called = %v/%v, want true/false", registry.IsZombie(), called)
+	}
+}
+
 func TestGeneratedDispatchRejectsUnknownOpcode(t *testing.T) {
 	dispatchers := map[string]Dispatcher{
 		"display":       &Display{},

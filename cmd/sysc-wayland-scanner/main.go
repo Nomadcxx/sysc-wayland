@@ -313,7 +313,7 @@ func writeInterface(w io.Writer, v Interface) {
 
 	// Requests
 	for i, r := range v.Requests {
-		writeRequest(w, ifaceName, i, r)
+		writeRequest(w, ifaceName, v, i, r)
 	}
 
 	if !hasDestructor(v) {
@@ -337,7 +337,7 @@ func writeInterface(w io.Writer, v Interface) {
 	writeEventDispatcher(w, ifaceName, v)
 }
 
-func writeRequest(w io.Writer, ifaceName string, opcode int, r Request) {
+func writeRequest(w io.Writer, ifaceName string, iface Interface, opcode int, r Request) {
 	requestName := toCamel(r.Name)
 
 	// Generate param & returns types
@@ -388,6 +388,14 @@ func writeRequest(w io.Writer, ifaceName string, opcode int, r Request) {
 	fmt.Fprintf(w, "func (i *%s) %s(%s) (%s) {\n", ifaceName, requestName, strings.Join(params, ","), strings.Join(returnTypes, ","))
 	if r.Type == "destructor" {
 		fmt.Fprintf(w, "defer i.MarkZombie()\n")
+	}
+	if protocol.Name == "wayland" && iface.Name == "wl_fixes" && r.Name == "destroy_registry" {
+		for _, arg := range r.Args {
+			if arg.Type == "object" && arg.Interface == "wl_registry" {
+				fmt.Fprintf(w, "defer %s.MarkZombie()\n", toLowerCamel(arg.Name))
+				break
+			}
+		}
 	}
 
 	// Create new objects, if any

@@ -143,6 +143,20 @@ func TestScannerPadsEventArrayAdvancement(t *testing.T) {
 	}
 }
 
+func TestScannerMarksDestroyedRegistryZombie(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "fixes.xml")
+	output := filepath.Join(dir, "fixes.go")
+	writeFixture(t, input, destroyRegistryProtocol)
+
+	runScanner(t, "-pkg", "client", "-prefix", "wl_", "-i", input, "-o", output)
+	generated := readFile(t, output)
+	want := []byte("func (i *Fixes) DestroyRegistry(registry *Registry) error {\n\tdefer registry.MarkZombie()")
+	if !bytes.Contains(generated, want) {
+		t.Fatalf("generated DestroyRegistry does not mark its target zombie:\n%s", generated)
+	}
+}
+
 func TestScannerReproducesVendoredCoreBinding(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -269,6 +283,20 @@ const arrayEventProtocol = `<?xml version="1.0" encoding="UTF-8"?>
       <arg name="values" type="array"/>
       <arg name="count" type="uint"/>
     </event>
+  </interface>
+</protocol>
+`
+
+const destroyRegistryProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="wayland">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="wl_registry" version="1">
+  </interface>
+  <interface name="wl_fixes" version="1">
+    <request name="destroy" type="destructor"/>
+    <request name="destroy_registry">
+      <arg name="registry" type="object" interface="wl_registry"/>
+    </request>
   </interface>
 </protocol>
 `
