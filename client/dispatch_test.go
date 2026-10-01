@@ -207,6 +207,67 @@ func TestFixesDestroyRegistryDiscardsInFlightEvents(t *testing.T) {
 	}
 }
 
+func TestDispatchRejectsMalformedRegistryStrings(t *testing.T) {
+	tests := []struct {
+		name        string
+		declaredLen uint32
+		data        []byte
+		want        string
+	}{
+		{name: "missing NUL", declaredLen: 3, data: []byte("bad"), want: "NUL terminator"},
+		{name: "length exceeds body", declaredLen: 64, want: "truncated event string"},
+		{name: "empty length", want: "NUL terminator"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, peer := socketPairContext(t)
+			registry := NewRegistry(ctx)
+			called := false
+			registry.SetGlobalHandler(func(RegistryGlobalEvent) { called = true })
+
+			paddedLen := PaddedLen(len(tt.data))
+			body := make([]byte, 4+4+paddedLen+4)
+			PutUint32(body[:4], 42)
+			PutUint32(body[4:8], tt.declaredLen)
+			copy(body[8:], tt.data)
+			PutUint32(body[8+paddedLen:], 4)
+			if _, err := peer.Write(testFrame(registry.ID(), 0, body)); err != nil {
+				t.Fatal(err)
+			}
+
+			err := ctx.Dispatch()
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Dispatch() error = %v, want %q", err, tt.want)
+			}
+			if called {
+				t.Fatal("malformed registry event called its handler")
+			}
+		})
+	}
+}
+
+func TestDispatchRejectsOversizedKeyboardArray(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	keyboard := NewKeyboard(ctx)
+	called := false
+	keyboard.SetEnterHandler(func(KeyboardEnterEvent) { called = true })
+	body := make([]byte, 12)
+	PutUint32(body[0:4], 1)
+	PutUint32(body[4:8], 0)
+	PutUint32(body[8:12], 64)
+	if _, err := peer.Write(testFrame(keyboard.ID(), 1, body)); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ctx.Dispatch()
+	if err == nil || !strings.Contains(err.Error(), "truncated event array") {
+		t.Fatalf("Dispatch() error = %v, want truncated event array", err)
+	}
+	if called {
+		t.Fatal("malformed keyboard event called its handler")
+	}
+}
+
 func TestGeneratedDispatchRejectsUnknownOpcode(t *testing.T) {
 	dispatchers := map[string]Dispatcher{
 		"display":       &Display{},

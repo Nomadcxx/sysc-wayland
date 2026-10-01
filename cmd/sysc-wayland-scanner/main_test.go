@@ -131,11 +131,41 @@ func TestScannerPadsEventArrayAdvancement(t *testing.T) {
 	generated := readFile(t, output)
 	for _, want := range [][]byte{
 		[]byte("copy(e.Values, data[l:l+valuesLen])"),
-		[]byte("l += client.PaddedLen(valuesLen)"),
+		[]byte("valuesPaddedLen := client.PaddedLen(valuesLen)"),
+		[]byte("l += valuesPaddedLen"),
 		[]byte("e.Count = client.Uint32(data[l : l+4])"),
 	} {
 		if !bytes.Contains(generated, want) {
 			t.Fatalf("generated array event decoder does not contain %q:\n%s", want, generated)
+		}
+	}
+	if _, err := parser.ParseFile(token.NewFileSet(), output, generated, parser.AllErrors); err != nil {
+		t.Fatalf("parse generated output: %v", err)
+	}
+}
+
+func TestScannerBoundsVariableEventFields(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "variable-event.xml")
+	output := filepath.Join(dir, "variable-event.go")
+	writeFixture(t, input, arrayEventProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", output)
+	generated := readFile(t, output)
+	for _, want := range [][]byte{
+		[]byte("if len(data)-l < 4"),
+		[]byte("panic(\"client: truncated event string length\")"),
+		[]byte("if uint64(messageWireLen) > uint64(len(data)-l)"),
+		[]byte("panic(\"client: truncated event string\")"),
+		[]byte("e.Message = client.String(data[l : l+messageLen])"),
+		[]byte("l += messagePaddedLen"),
+		[]byte("if uint64(valuesWireLen) > uint64(len(data)-l)"),
+		[]byte("panic(\"client: truncated event array\")"),
+		[]byte("copy(e.Values, data[l:l+valuesLen])"),
+		[]byte("l += valuesPaddedLen"),
+	} {
+		if !bytes.Contains(generated, want) {
+			t.Fatalf("generated variable event decoder does not contain %q:\n%s", want, generated)
 		}
 	}
 	if _, err := parser.ParseFile(token.NewFileSet(), output, generated, parser.AllErrors); err != nil {
@@ -280,6 +310,7 @@ const arrayEventProtocol = `<?xml version="1.0" encoding="UTF-8"?>
   <copyright>Fixture copyright.</copyright>
   <interface name="array_widget" version="1">
     <event name="values">
+      <arg name="message" type="string"/>
       <arg name="values" type="array"/>
       <arg name="count" type="uint"/>
     </event>

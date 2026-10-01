@@ -152,6 +152,9 @@ func Uint32(src []byte) uint32 {
 
 func String(src []byte) string {
 	idx := bytes.IndexByte(src, 0)
+	if idx < 0 {
+		panic("client: string is missing a NUL terminator")
+	}
 	src = src[:idx:idx]
 	return *(*string)(unsafe.Pointer(&src))
 }

@@ -713,6 +713,11 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 		return
 	}
 
+	decoderPrefix := "client."
+	if protocol.Name == "wayland" {
+		decoderPrefix = ""
+	}
+
 	hasFD := false
 	for _, e := range v.Events {
 		for _, arg := range e.Args {
@@ -858,33 +863,27 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 				fmt.Fprintf(w, "l += 4\n")
 
 			case "string":
-				if protocol.Name == "wayland" {
-					fmt.Fprintf(w, "%sLen := PaddedLen(int(Uint32(data[l : l+4])))\n", argNameLower)
-				} else {
-					fmt.Fprintf(w, "%sLen := client.PaddedLen(int(client.Uint32(data[l : l+4])))\n", argNameLower)
-				}
+				fmt.Fprintf(w, "if len(data)-l < 4 { panic(\"client: truncated event string length\") }\n")
+				fmt.Fprintf(w, "%sWireLen := %sUint32(data[l : l+4])\n", argNameLower, decoderPrefix)
 				fmt.Fprintf(w, "l += 4\n")
-				if protocol.Name == "wayland" {
-					fmt.Fprintf(w, "e.%s = String(data[l : l+%sLen])\n", argName, argNameLower)
-				} else {
-					fmt.Fprintf(w, "e.%s = client.String(data[l : l+%sLen])\n", argName, argNameLower)
-				}
-				fmt.Fprintf(w, "l += %sLen\n", argNameLower)
+				fmt.Fprintf(w, "if uint64(%sWireLen) > uint64(len(data)-l) { panic(\"client: truncated event string\") }\n", argNameLower)
+				fmt.Fprintf(w, "%sLen := int(%sWireLen)\n", argNameLower, argNameLower)
+				fmt.Fprintf(w, "%sPaddedLen := %sPaddedLen(%sLen)\n", argNameLower, decoderPrefix, argNameLower)
+				fmt.Fprintf(w, "if %sPaddedLen > len(data)-l { panic(\"client: truncated event string padding\") }\n", argNameLower)
+				fmt.Fprintf(w, "e.%s = %sString(data[l : l+%sLen])\n", argName, decoderPrefix, argNameLower)
+				fmt.Fprintf(w, "l += %sPaddedLen\n", argNameLower)
 
 			case "array":
-				if protocol.Name == "wayland" {
-					fmt.Fprintf(w, "%sLen := int(Uint32(data[l : l+4]))\n", argNameLower)
-				} else {
-					fmt.Fprintf(w, "%sLen := int(client.Uint32(data[l : l+4]))\n", argNameLower)
-				}
+				fmt.Fprintf(w, "if len(data)-l < 4 { panic(\"client: truncated event array length\") }\n")
+				fmt.Fprintf(w, "%sWireLen := %sUint32(data[l : l+4])\n", argNameLower, decoderPrefix)
 				fmt.Fprintf(w, "l += 4\n")
+				fmt.Fprintf(w, "if uint64(%sWireLen) > uint64(len(data)-l) { panic(\"client: truncated event array\") }\n", argNameLower)
+				fmt.Fprintf(w, "%sLen := int(%sWireLen)\n", argNameLower, argNameLower)
+				fmt.Fprintf(w, "%sPaddedLen := %sPaddedLen(%sLen)\n", argNameLower, decoderPrefix, argNameLower)
+				fmt.Fprintf(w, "if %sPaddedLen > len(data)-l { panic(\"client: truncated event array padding\") }\n", argNameLower)
 				fmt.Fprintf(w, "e.%s = make([]byte, %sLen)\n", argName, argNameLower)
 				fmt.Fprintf(w, "copy(e.%s, data[l:l+%sLen])\n", argName, argNameLower)
-				if protocol.Name == "wayland" {
-					fmt.Fprintf(w, "l += PaddedLen(%sLen)\n", argNameLower)
-				} else {
-					fmt.Fprintf(w, "l += client.PaddedLen(%sLen)\n", argNameLower)
-				}
+				fmt.Fprintf(w, "l += %sPaddedLen\n", argNameLower)
 			}
 		}
 
