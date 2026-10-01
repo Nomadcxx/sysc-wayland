@@ -7687,6 +7687,7 @@ func (i *Fixes) Destroy() error {
 //
 //	registry: the registry to destroy
 func (i *Fixes) DestroyRegistry(registry *Registry) error {
+	defer registry.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
