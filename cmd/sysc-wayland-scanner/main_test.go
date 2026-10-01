@@ -121,6 +121,28 @@ func TestScannerFramesArrayRequests(t *testing.T) {
 	}
 }
 
+func TestScannerPadsEventArrayAdvancement(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "array-event.xml")
+	output := filepath.Join(dir, "array-event.go")
+	writeFixture(t, input, arrayEventProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", output)
+	generated := readFile(t, output)
+	for _, want := range [][]byte{
+		[]byte("copy(e.Values, data[l:l+valuesLen])"),
+		[]byte("l += client.PaddedLen(valuesLen)"),
+		[]byte("e.Count = client.Uint32(data[l : l+4])"),
+	} {
+		if !bytes.Contains(generated, want) {
+			t.Fatalf("generated array event decoder does not contain %q:\n%s", want, generated)
+		}
+	}
+	if _, err := parser.ParseFile(token.NewFileSet(), output, generated, parser.AllErrors); err != nil {
+		t.Fatalf("parse generated output: %v", err)
+	}
+}
+
 func TestScannerReproducesVendoredCoreBinding(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -235,6 +257,18 @@ const arrayRequestProtocol = `<?xml version="1.0" encoding="UTF-8"?>
     <request name="set_values">
       <arg name="values" type="array"/>
     </request>
+  </interface>
+</protocol>
+`
+
+const arrayEventProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fixture">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="array_widget" version="1">
+    <event name="values">
+      <arg name="values" type="array"/>
+      <arg name="count" type="uint"/>
+    </event>
   </interface>
 </protocol>
 `

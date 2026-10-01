@@ -872,7 +872,11 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 				fmt.Fprintf(w, "l += 4\n")
 				fmt.Fprintf(w, "e.%s = make([]byte, %sLen)\n", argName, argNameLower)
 				fmt.Fprintf(w, "copy(e.%s, data[l:l+%sLen])\n", argName, argNameLower)
-				fmt.Fprintf(w, "l += %sLen\n", argNameLower)
+				if protocol.Name == "wayland" {
+					fmt.Fprintf(w, "l += PaddedLen(%sLen)\n", argNameLower)
+				} else {
+					fmt.Fprintf(w, "l += client.PaddedLen(%sLen)\n", argNameLower)
+				}
 			}
 		}
 
