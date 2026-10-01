@@ -221,10 +221,21 @@ func (i *Display) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 		e.Code = Uint32(data[l : l+4])
 		l += 4
-		messageLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		messageWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(messageWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		messageLen := int(messageWireLen)
+		messagePaddedLen := PaddedLen(messageLen)
+		if messagePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.Message = String(data[l : l+messageLen])
-		l += messageLen
+		l += messagePaddedLen
 
 		i.Context().recordDisplayError(e)
 		if i.errorHandler != nil {
@@ -395,10 +406,21 @@ func (i *Registry) Dispatch(opcode uint32, fd int, data []byte) {
 		l := 0
 		e.Name = Uint32(data[l : l+4])
 		l += 4
-		interfaceLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		interfaceWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(interfaceWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		interfaceLen := int(interfaceWireLen)
+		interfacePaddedLen := PaddedLen(interfaceLen)
+		if interfacePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.Interface = String(data[l : l+interfaceLen])
-		l += interfaceLen
+		l += interfacePaddedLen
 		e.Version = Uint32(data[l : l+4])
 		l += 4
 
@@ -2069,10 +2091,21 @@ func (i *DataOffer) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		var e DataOfferOfferEvent
 		l := 0
-		mimeTypeLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		mimeTypeWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(mimeTypeWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		mimeTypeLen := int(mimeTypeWireLen)
+		mimeTypePaddedLen := PaddedLen(mimeTypeLen)
+		if mimeTypePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.MimeType = String(data[l : l+mimeTypeLen])
-		l += mimeTypeLen
+		l += mimeTypePaddedLen
 
 		i.offerHandler(e)
 	case 1:
@@ -2392,10 +2425,21 @@ func (i *DataSource) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		var e DataSourceTargetEvent
 		l := 0
-		mimeTypeLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		mimeTypeWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(mimeTypeWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		mimeTypeLen := int(mimeTypeWireLen)
+		mimeTypePaddedLen := PaddedLen(mimeTypeLen)
+		if mimeTypePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.MimeType = String(data[l : l+mimeTypeLen])
-		l += mimeTypeLen
+		l += mimeTypePaddedLen
 
 		i.targetHandler(e)
 	case 1:
@@ -2407,10 +2451,21 @@ func (i *DataSource) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		var e DataSourceSendEvent
 		l := 0
-		mimeTypeLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		mimeTypeWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(mimeTypeWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		mimeTypeLen := int(mimeTypeWireLen)
+		mimeTypePaddedLen := PaddedLen(mimeTypeLen)
+		if mimeTypePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.MimeType = String(data[l : l+mimeTypeLen])
-		l += mimeTypeLen
+		l += mimeTypePaddedLen
 		e.Fd = fd
 
 		i.sendHandler(e)
@@ -4896,10 +4951,21 @@ func (i *Seat) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		var e SeatNameEvent
 		l := 0
-		nameLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		nameWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(nameWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		nameLen := int(nameWireLen)
+		namePaddedLen := PaddedLen(nameLen)
+		if namePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.Name = String(data[l : l+nameLen])
-		l += nameLen
+		l += namePaddedLen
 
 		i.nameHandler(e)
 	default:
@@ -6116,11 +6182,22 @@ func (i *Keyboard) Dispatch(opcode uint32, fd int, data []byte) {
 			e.Surface = nil
 		}
 		l += 4
-		keysLen := int(Uint32(data[l : l+4]))
+		if len(data)-l < 4 {
+			panic("client: truncated event array length")
+		}
+		keysWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(keysWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event array")
+		}
+		keysLen := int(keysWireLen)
+		keysPaddedLen := PaddedLen(keysLen)
+		if keysPaddedLen > len(data)-l {
+			panic("client: truncated event array padding")
+		}
 		e.Keys = make([]byte, keysLen)
 		copy(e.Keys, data[l:l+keysLen])
-		l += PaddedLen(keysLen)
+		l += keysPaddedLen
 
 		i.enterHandler(e)
 	case 2:
@@ -6979,14 +7056,36 @@ func (i *Output) Dispatch(opcode uint32, fd int, data []byte) {
 		l += 4
 		e.Subpixel = int32(Uint32(data[l : l+4]))
 		l += 4
-		makeLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		makeWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(makeWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		makeLen := int(makeWireLen)
+		makePaddedLen := PaddedLen(makeLen)
+		if makePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.Make = String(data[l : l+makeLen])
-		l += makeLen
-		modelLen := PaddedLen(int(Uint32(data[l : l+4])))
+		l += makePaddedLen
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		modelWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(modelWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		modelLen := int(modelWireLen)
+		modelPaddedLen := PaddedLen(modelLen)
+		if modelPaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.Model = String(data[l : l+modelLen])
-		l += modelLen
+		l += modelPaddedLen
 		e.Transform = int32(Uint32(data[l : l+4]))
 		l += 4
 
@@ -7030,10 +7129,21 @@ func (i *Output) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		var e OutputNameEvent
 		l := 0
-		nameLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		nameWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(nameWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		nameLen := int(nameWireLen)
+		namePaddedLen := PaddedLen(nameLen)
+		if namePaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.Name = String(data[l : l+nameLen])
-		l += nameLen
+		l += namePaddedLen
 
 		i.nameHandler(e)
 	case 5:
@@ -7042,10 +7152,21 @@ func (i *Output) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		var e OutputDescriptionEvent
 		l := 0
-		descriptionLen := PaddedLen(int(Uint32(data[l : l+4])))
+		if len(data)-l < 4 {
+			panic("client: truncated event string length")
+		}
+		descriptionWireLen := Uint32(data[l : l+4])
 		l += 4
+		if uint64(descriptionWireLen) > uint64(len(data)-l) {
+			panic("client: truncated event string")
+		}
+		descriptionLen := int(descriptionWireLen)
+		descriptionPaddedLen := PaddedLen(descriptionLen)
+		if descriptionPaddedLen > len(data)-l {
+			panic("client: truncated event string padding")
+		}
 		e.Description = String(data[l : l+descriptionLen])
-		l += descriptionLen
+		l += descriptionPaddedLen
 
 		i.descriptionHandler(e)
 	default:
