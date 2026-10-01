@@ -44,7 +44,12 @@ func (ctx *Context) RegisterWithID(p Proxy, id uint32) {
 	if id < firstServerID {
 		panic(fmt.Sprintf("client: invalid server object ID %#x", id))
 	}
-	if _, live := ctx.objects[id]; live {
+	// The server sends no delete_id for its own objects: it frees the ID once
+	// it has handled the client's destroy, and may then reuse it. A zombie
+	// there is that destroyed object, kept only to absorb events sent before
+	// the destroy arrived, so the new object replaces it. Only a live object
+	// at the ID is a duplicate.
+	if old, ok := ctx.objects[id]; ok && !old.IsZombie() {
 		panic(fmt.Sprintf("client: duplicate Wayland object ID %#x", id))
 	}
 	p.SetID(id)

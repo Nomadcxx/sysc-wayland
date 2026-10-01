@@ -68,6 +68,44 @@ func TestObjectServerRegistrationRejectsLiveID(t *testing.T) {
 	mustPanic(t, func() { ctx.RegisterWithID(&BaseProxy{}, firstServerID) })
 }
 
+// A server-allocated object gets no delete_id: the compositor frees its ID as
+// soon as it handles the client's destroy, and may hand the same ID to the
+// next object it creates. The destroyed proxy stays in the map as a zombie to
+// absorb events already in flight, so the next registration at that ID has to
+// replace it. Refusing it was sysc-shell's crash: a wl_data_offer destroyed on
+// a selection change, then a new offer at 0xff000000 on the next focus change.
+func TestObjectServerRegistrationReplacesZombie(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	device := &DataDevice{}
+	ctx.Register(device)
+	var offers []*DataOffer
+	device.SetDataOfferHandler(func(e DataDeviceDataOfferEvent) { offers = append(offers, e.Id) })
+	offer := func() {
+		t.Helper()
+		body := make([]byte, 4)
+		PutUint32(body, firstServerID)
+		if _, err := peer.Write(testFrame(device.ID(), 0, body)); err != nil {
+			t.Fatal(err)
+		}
+		if err := ctx.Dispatch(); err != nil {
+			t.Fatalf("Dispatch(data_offer) = %v", err)
+		}
+	}
+
+	offer()
+	if err := offers[0].Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	offer()
+
+	if len(offers) != 2 || offers[1] == offers[0] || offers[1].IsZombie() {
+		t.Fatalf("offers after reuse = %v, want a second, live offer", offers)
+	}
+	if got := ctx.GetProxy(firstServerID); got != offers[1] {
+		t.Fatalf("proxy at reused ID = %p, want the new offer %p", got, offers[1])
+	}
+}
+
 func TestObjectDeleteRemovesProxy(t *testing.T) {
 	ctx := newTestContext()
 	proxy := &BaseProxy{}
