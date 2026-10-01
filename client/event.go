@@ -134,6 +134,8 @@ func getFdsFromOob(oob []byte, oobn int, source string) ([]int, error) {
 	for _, scm := range scms {
 		fds, err := unix.ParseUnixRights(&scm)
 		if err != nil {
+			closeFDs(fdsRet)
+			closeFDs(fds)
 			return nil, fmt.Errorf("getFdsFromOob: unable to parse unix rights from %s: %w", source, err)
 		}
 

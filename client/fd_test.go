@@ -176,6 +176,28 @@ func TestReadFrameRejectsControlTruncation(t *testing.T) {
 	}
 }
 
+func TestGetFdsFromOobClosesParsedDescriptorsOnError(t *testing.T) {
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := unix.FcntlInt(uintptr(fds[0]), unix.F_GETFD, 0); err == nil {
+			_ = unix.Close(fds[0])
+		}
+		_ = unix.Close(fds[1])
+	})
+
+	oob := append(unix.UnixRights(fds[0]), unix.UnixCredentials(&unix.Ucred{})...)
+	_, err = getFdsFromOob(oob, len(oob), "test")
+	if err == nil {
+		t.Fatal("getFdsFromOob() error = nil, want non-rights control message error")
+	}
+	if _, err := unix.FcntlInt(uintptr(fds[0]), unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
+		t.Fatalf("parsed descriptor remains open: %v", err)
+	}
+}
+
 type testPipe struct {
 	read  int
 	write int
