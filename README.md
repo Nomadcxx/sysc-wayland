@@ -16,6 +16,10 @@ package (ext-idle-notify-v1, staging, wayland-protocols 1.49).
 The v0.2.2 release queues coalesced Wayland file descriptors and generates opcode metadata so FD
 events remain correctly associated when non-FD events share a socket read.
 
+The v0.3.1 release lets a server-created object take an ID whose previous object the client
+already destroyed. The server sends no `delete_id` for its own objects, so the destroyed proxy
+was still mapped and the reused ID panicked as a duplicate.
+
 The first consumer will be [`sysc-shell`](https://github.com/Nomadcxx/sysc-shell).
 
 ## Release qualification

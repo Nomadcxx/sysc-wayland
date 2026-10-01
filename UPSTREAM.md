@@ -45,3 +45,4 @@ Vendored from wayland-protocols tag 1.45:
 | `23e960c` | The scanner emits the sysc client import, requires explicit external xdg-shell imports, and preserves fatal dispatch behavior. | `go test ./cmd/sysc-wayland-scanner` | Local divergence |
 | `405b74c` | Coalesced received descriptors are queued in order and drained on EOF, fatal dispatch, or context close. | `go test -race -count=1 -p 1 github.com/Nomadcxx/sysc-wayland/client` | Local divergence |
 | `56eccce` | Generated dispatchers report FD-bearing opcodes so queued rights survive intervening non-FD events. | `go test -race -count=1 -p 1 github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner` | Local divergence |
+| `add1d2e` | A server-allocated ID reused after the client destroyed its object replaces the zombie proxy; a live object at the ID is still a duplicate. | `go test ./client -run TestObjectServerRegistration` | Local divergence |
