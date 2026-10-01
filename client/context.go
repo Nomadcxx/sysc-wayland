@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -191,21 +193,33 @@ func closeReceivedFD(fd int) {
 }
 
 func Connect(addr string) (*Display, error) {
+	ctx := &Context{objects: make(map[uint32]Proxy)}
 	if addr == "" {
-		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-		if runtimeDir == "" {
-			return nil, errors.New("env XDG_RUNTIME_DIR not set")
+		if value, ok := os.LookupEnv("WAYLAND_SOCKET"); ok {
+			fd, err := strconv.Atoi(value)
+			if err != nil || fd < 0 {
+				return nil, fmt.Errorf("env WAYLAND_SOCKET is not a valid file descriptor: %q", value)
+			}
+			conn, err := unixConnFromFD(fd)
+			if err != nil {
+				return nil, fmt.Errorf("env WAYLAND_SOCKET: %w", err)
+			}
+			ctx.conn = conn
+			return NewDisplay(ctx), nil
 		}
-		if addr == "" {
-			addr = os.Getenv("WAYLAND_DISPLAY")
-		}
+
+		addr = os.Getenv("WAYLAND_DISPLAY")
 		if addr == "" {
 			addr = "wayland-0"
 		}
-		addr = runtimeDir + "/" + addr
+		if !filepath.IsAbs(addr) {
+			runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+			if runtimeDir == "" {
+				return nil, errors.New("env XDG_RUNTIME_DIR not set")
+			}
+			addr = filepath.Join(runtimeDir, addr)
+		}
 	}
-
-	ctx := &Context{objects: make(map[uint32]Proxy)}
 
 	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: addr, Net: "unix"})
 	if err != nil {
@@ -214,4 +228,27 @@ func Connect(addr string) (*Display, error) {
 	ctx.conn = conn
 
 	return NewDisplay(ctx), nil
+}
+
+func unixConnFromFD(fd int) (*net.UnixConn, error) {
+	file := os.NewFile(uintptr(fd), "wayland")
+	if file == nil {
+		return nil, errors.New("invalid file descriptor")
+	}
+	conn, err := net.FileConn(file)
+	closeErr := file.Close()
+	if err != nil {
+		return nil, errors.Join(err, closeErr)
+	}
+	if closeErr != nil {
+		_ = conn.Close()
+		return nil, closeErr
+	}
+
+	unixConn, ok := conn.(*net.UnixConn)
+	if !ok || unixConn.LocalAddr() == nil || unixConn.LocalAddr().Network() != "unix" {
+		_ = conn.Close()
+		return nil, errors.New("file descriptor is not a Unix stream socket")
+	}
+	return unixConn, nil
 }
