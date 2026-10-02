@@ -206,9 +206,6 @@ func (i *ZwpTabletSeatV2) HasFD(opcode uint32) bool {
 func (i *ZwpTabletSeatV2) Dispatch(opcode uint32, fd int, data []byte) {
 	switch opcode {
 	case 0:
-		if i.tabletAddedHandler == nil {
-			return
-		}
 		var e ZwpTabletSeatV2TabletAddedEvent
 		l := 0
 		idID := client.Uint32(data[l : l+4])
@@ -221,11 +218,11 @@ func (i *ZwpTabletSeatV2) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		l += 4
 
-		i.tabletAddedHandler(e)
-	case 1:
-		if i.toolAddedHandler == nil {
+		if i.tabletAddedHandler == nil {
 			return
 		}
+		i.tabletAddedHandler(e)
+	case 1:
 		var e ZwpTabletSeatV2ToolAddedEvent
 		l := 0
 		idID := client.Uint32(data[l : l+4])
@@ -238,11 +235,11 @@ func (i *ZwpTabletSeatV2) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		l += 4
 
-		i.toolAddedHandler(e)
-	case 2:
-		if i.padAddedHandler == nil {
+		if i.toolAddedHandler == nil {
 			return
 		}
+		i.toolAddedHandler(e)
+	case 2:
 		var e ZwpTabletSeatV2PadAddedEvent
 		l := 0
 		idID := client.Uint32(data[l : l+4])
@@ -255,6 +252,9 @@ func (i *ZwpTabletSeatV2) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		l += 4
 
+		if i.padAddedHandler == nil {
+			return
+		}
 		i.padAddedHandler(e)
 	default:
 		panic("client: unsupported opcode")
@@ -2235,9 +2235,6 @@ func (i *ZwpTabletPadGroupV2) Dispatch(opcode uint32, fd int, data []byte) {
 
 		i.buttonsHandler(e)
 	case 1:
-		if i.ringHandler == nil {
-			return
-		}
 		var e ZwpTabletPadGroupV2RingEvent
 		l := 0
 		ringID := client.Uint32(data[l : l+4])
@@ -2250,11 +2247,11 @@ func (i *ZwpTabletPadGroupV2) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		l += 4
 
-		i.ringHandler(e)
-	case 2:
-		if i.stripHandler == nil {
+		if i.ringHandler == nil {
 			return
 		}
+		i.ringHandler(e)
+	case 2:
 		var e ZwpTabletPadGroupV2StripEvent
 		l := 0
 		stripID := client.Uint32(data[l : l+4])
@@ -2267,6 +2264,9 @@ func (i *ZwpTabletPadGroupV2) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		l += 4
 
+		if i.stripHandler == nil {
+			return
+		}
 		i.stripHandler(e)
 	case 3:
 		if i.modesHandler == nil {
@@ -2620,9 +2620,6 @@ func (i *ZwpTabletPadV2) HasFD(opcode uint32) bool {
 func (i *ZwpTabletPadV2) Dispatch(opcode uint32, fd int, data []byte) {
 	switch opcode {
 	case 0:
-		if i.groupHandler == nil {
-			return
-		}
 		var e ZwpTabletPadV2GroupEvent
 		l := 0
 		padGroupID := client.Uint32(data[l : l+4])
@@ -2635,6 +2632,9 @@ func (i *ZwpTabletPadV2) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		l += 4
 
+		if i.groupHandler == nil {
+			return
+		}
 		i.groupHandler(e)
 	case 1:
 		if i.pathHandler == nil {
