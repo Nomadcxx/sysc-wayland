@@ -43,6 +43,22 @@ func TestConnectJoinsRelativeWaylandDisplayToRuntimeDir(t *testing.T) {
 	}
 }
 
+func TestConnectJoinsExplicitRelativeName(t *testing.T) {
+	runtimeDir := t.TempDir()
+	listenConnectSocket(t, filepath.Join(runtimeDir, "wayland-test"))
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-other")
+	t.Setenv("WAYLAND_SOCKET", "not-a-file-descriptor")
+
+	display, err := Connect("wayland-test")
+	if err != nil {
+		t.Fatalf("Connect(\"wayland-test\"): %v", err)
+	}
+	if err := display.Context().Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConnectUsesWaylandSocket(t *testing.T) {
 	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
