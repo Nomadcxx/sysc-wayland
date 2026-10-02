@@ -212,13 +212,13 @@ func Connect(addr string) (*Display, error) {
 		if addr == "" {
 			addr = "wayland-0"
 		}
-		if !filepath.IsAbs(addr) {
-			runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-			if runtimeDir == "" {
-				return nil, errors.New("env XDG_RUNTIME_DIR not set")
-			}
-			addr = filepath.Join(runtimeDir, addr)
+	}
+	if !filepath.IsAbs(addr) {
+		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+		if runtimeDir == "" {
+			return nil, errors.New("env XDG_RUNTIME_DIR not set")
 		}
+		addr = filepath.Join(runtimeDir, addr)
 	}
 
 	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: addr, Net: "unix"})
