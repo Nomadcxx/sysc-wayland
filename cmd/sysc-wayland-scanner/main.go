@@ -763,9 +763,19 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 
 		isDeleteID := protocol.Name == "wayland" && v.Name == "wl_display" && e.Name == "delete_id"
 		isDisplayError := protocol.Name == "wayland" && v.Name == "wl_display" && e.Name == "error"
+		// A new_id is the server introducing an object. Events on that id follow
+		// immediately, so the proxy is registered even when no handler is set.
+		// The handler is still not called, and an fd is still closed, in that case.
+		hasNewID := false
+		for _, arg := range e.Args {
+			if arg.Type == "new_id" {
+				hasNewID = true
+				break
+			}
+		}
 
 		fmt.Fprintf(w, "case %d:\n", i)
-		if !isDeleteID && !isDisplayError {
+		if !isDeleteID && !isDisplayError && !hasNewID {
 			fmt.Fprintf(w, "if i.%sHandler == nil {\n", eventNameLower)
 			if hasFd {
 				fmt.Fprintf(w, "if fd != -1 {\n")
@@ -897,6 +907,16 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 			fmt.Fprintf(w, "if i.%sHandler != nil {\n", eventNameLower)
 			fmt.Fprintf(w, "i.%sHandler(e)\n", eventNameLower)
 			fmt.Fprintf(w, "}\n")
+		} else if hasNewID {
+			fmt.Fprintf(w, "\nif i.%sHandler == nil {\n", eventNameLower)
+			if hasFd {
+				fmt.Fprintf(w, "if fd != -1 {\n")
+				fmt.Fprintf(w, "unix.Close(fd)\n")
+				fmt.Fprintf(w, "}\n")
+			}
+			fmt.Fprintf(w, "return\n")
+			fmt.Fprintf(w, "}\n")
+			fmt.Fprintf(w, "i.%sHandler(e)\n", eventNameLower)
 		} else {
 			fmt.Fprintf(w, "\ni.%sHandler(e)\n", eventNameLower)
 		}

@@ -373,6 +373,27 @@ func TestScannerDoesNotRegisterObjectArguments(t *testing.T) {
 	}
 }
 
+// A nil handler must not skip registration. The server follows a new_id
+// event with events on that id, and an unknown sender fatals the connection.
+func TestScannerRegistersNewIDBeforeNilHandler(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "objects.xml")
+	out := filepath.Join(dir, "objects.go")
+	writeFixture(t, input, objectArgProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", out)
+	created, ok := eventBody(string(readFile(t, out)), "case 0:")
+	if !ok {
+		t.Fatal("generated dispatcher has no opcode 0 branch")
+	}
+	register := strings.Index(created, "RegisterWithID")
+	nilCheck := strings.Index(created, "Handler == nil")
+	call := strings.Index(created, "Handler(e)")
+	if register < 0 || nilCheck < 0 || call < 0 || register > nilCheck || nilCheck > call {
+		t.Fatalf("new_id registration is not before the nil-handler return:\n%s", created)
+	}
+}
+
 // eventBody returns the generated source between one opcode branch and the
 // next, so a test can assert on one event without matching the whole file.
 func eventBody(source, branch string) (string, bool) {
