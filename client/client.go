@@ -2819,9 +2819,6 @@ func (i *DataDevice) HasFD(opcode uint32) bool {
 func (i *DataDevice) Dispatch(opcode uint32, fd int, data []byte) {
 	switch opcode {
 	case 0:
-		if i.dataOfferHandler == nil {
-			return
-		}
 		var e DataDeviceDataOfferEvent
 		l := 0
 		idID := Uint32(data[l : l+4])
@@ -2834,6 +2831,9 @@ func (i *DataDevice) Dispatch(opcode uint32, fd int, data []byte) {
 		}
 		l += 4
 
+		if i.dataOfferHandler == nil {
+			return
+		}
 		i.dataOfferHandler(e)
 	case 1:
 		if i.enterHandler == nil {

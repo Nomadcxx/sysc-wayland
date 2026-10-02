@@ -268,6 +268,35 @@ func TestDispatchRejectsOversizedKeyboardArray(t *testing.T) {
 	}
 }
 
+func TestDispatchRegistersDataOfferWithoutHandler(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	device := NewDataDevice(ctx)
+	offerID := firstServerID
+	body := make([]byte, 4)
+	PutUint32(body, offerID)
+	if _, err := peer.Write(testFrame(device.ID(), 0, body)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("data_offer Dispatch() error = %v", err)
+	}
+	offer, ok := ctx.GetProxy(offerID).(*DataOffer)
+	if !ok || offer == nil || offer.ID() != offerID {
+		t.Fatalf("registered offer = %#v, want live *DataOffer %#x", ctx.GetProxy(offerID), offerID)
+	}
+
+	mime := "text/plain"
+	offerBody := make([]byte, 4+PaddedLen(len(mime)+1))
+	PutString(offerBody, mime)
+	if _, err := peer.Write(testFrame(offerID, 0, offerBody)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("following data_offer.offer Dispatch() error = %v", err)
+	}
+}
+
 func TestGeneratedDispatchRejectsUnknownOpcode(t *testing.T) {
 	dispatchers := map[string]Dispatcher{
 		"display":       &Display{},
