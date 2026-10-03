@@ -207,6 +207,108 @@ func TestFixesDestroyRegistryDiscardsInFlightEvents(t *testing.T) {
 	}
 }
 
+func TestDispatchAllowNullStringSurfacesNull(t *testing.T) {
+	t.Run("null target", func(t *testing.T) {
+		ctx, peer := socketPairContext(t)
+		source := NewDataSource(ctx)
+		var got DataSourceTargetEvent
+		called := false
+		source.SetTargetHandler(func(e DataSourceTargetEvent) {
+			called = true
+			got = e
+		})
+		body := make([]byte, 4)
+		PutUint32(body, 0)
+		if _, err := peer.Write(testFrame(source.ID(), 0, body)); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := ctx.Dispatch(); err != nil {
+			t.Fatalf("Dispatch() error = %v, want nil for a NULL target mime", err)
+		}
+		if !called {
+			t.Fatal("NULL target did not call its handler")
+		}
+		mime, ok := any(got.MimeType).(*string)
+		if !ok || mime != nil {
+			t.Fatalf("MimeType = %#v, want nil *string", got.MimeType)
+		}
+
+		cancelled := false
+		source.SetCancelledHandler(func(DataSourceCancelledEvent) { cancelled = true })
+		if _, err := peer.Write(testFrame(source.ID(), 2, nil)); err != nil {
+			t.Fatal(err)
+		}
+		if err := ctx.Dispatch(); err != nil {
+			t.Fatalf("Dispatch() after NULL target error = %v", err)
+		}
+		if !cancelled {
+			t.Fatal("connection stayed fatal after a NULL target mime")
+		}
+	})
+
+	t.Run("empty target", func(t *testing.T) {
+		ctx, peer := socketPairContext(t)
+		source := NewDataSource(ctx)
+		var got DataSourceTargetEvent
+		source.SetTargetHandler(func(e DataSourceTargetEvent) { got = e })
+		body := make([]byte, 8)
+		PutUint32(body[:4], 1)
+		if _, err := peer.Write(testFrame(source.ID(), 0, body)); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := ctx.Dispatch(); err != nil {
+			t.Fatalf("Dispatch() error = %v, want nil for an empty target mime", err)
+		}
+		mime, ok := any(got.MimeType).(*string)
+		if !ok || mime == nil || *mime != "" {
+			t.Fatalf("MimeType = %#v, want pointer to empty string", got.MimeType)
+		}
+	})
+
+	t.Run("present target", func(t *testing.T) {
+		ctx, peer := socketPairContext(t)
+		source := NewDataSource(ctx)
+		var got DataSourceTargetEvent
+		source.SetTargetHandler(func(e DataSourceTargetEvent) { got = e })
+		const mimeType = "text/plain"
+		body := make([]byte, 4+PaddedLen(len(mimeType)+1))
+		PutString(body, mimeType)
+		if _, err := peer.Write(testFrame(source.ID(), 0, body)); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := ctx.Dispatch(); err != nil {
+			t.Fatalf("Dispatch() error = %v", err)
+		}
+		mime, ok := any(got.MimeType).(*string)
+		if !ok || mime == nil || *mime != mimeType {
+			t.Fatalf("MimeType = %#v, want %q", got.MimeType, mimeType)
+		}
+	})
+
+	t.Run("null send still fatal", func(t *testing.T) {
+		ctx, peer := socketPairContext(t)
+		source := NewDataSource(ctx)
+		called := false
+		source.SetSendHandler(func(DataSourceSendEvent) { called = true })
+		body := make([]byte, 4)
+		PutUint32(body, 0)
+		if _, err := peer.Write(testFrame(source.ID(), 1, body)); err != nil {
+			t.Fatal(err)
+		}
+
+		err := ctx.Dispatch()
+		if err == nil || !strings.Contains(err.Error(), "NUL terminator") {
+			t.Fatalf("Dispatch() error = %v, want NUL terminator", err)
+		}
+		if called {
+			t.Fatal("non-null string called its handler")
+		}
+	})
+}
+
 func TestDispatchRejectsMalformedRegistryStrings(t *testing.T) {
 	tests := []struct {
 		name        string

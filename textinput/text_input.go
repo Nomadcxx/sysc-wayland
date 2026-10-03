@@ -693,7 +693,7 @@ func (i *ZwpTextInputV3) SetLeaveHandler(f ZwpTextInputV3LeaveHandlerFunc) {
 // The initial value of text is an empty string, and cursor_begin,
 // cursor_end and cursor_hidden are all 0.
 type ZwpTextInputV3PreeditStringEvent struct {
-	Text        string
+	Text        *string
 	CursorBegin int32
 	CursorEnd   int32
 }
@@ -715,7 +715,7 @@ func (i *ZwpTextInputV3) SetPreeditStringHandler(f ZwpTextInputV3PreeditStringHa
 //
 // The initial value of text is an empty string.
 type ZwpTextInputV3CommitStringEvent struct {
-	Text string
+	Text *string
 }
 type ZwpTextInputV3CommitStringHandlerFunc func(ZwpTextInputV3CommitStringEvent)
 
@@ -845,7 +845,12 @@ func (i *ZwpTextInputV3) Dispatch(opcode uint32, fd int, data []byte) {
 		if textPaddedLen > len(data)-l {
 			panic("client: truncated event string padding")
 		}
-		e.Text = client.String(data[l : l+textLen])
+		if textLen == 0 {
+			e.Text = nil
+		} else {
+			text := client.String(data[l : l+textLen])
+			e.Text = &text
+		}
 		l += textPaddedLen
 		e.CursorBegin = int32(client.Uint32(data[l : l+4]))
 		l += 4
@@ -872,7 +877,12 @@ func (i *ZwpTextInputV3) Dispatch(opcode uint32, fd int, data []byte) {
 		if textPaddedLen > len(data)-l {
 			panic("client: truncated event string padding")
 		}
-		e.Text = client.String(data[l : l+textLen])
+		if textLen == 0 {
+			e.Text = nil
+		} else {
+			text := client.String(data[l : l+textLen])
+			e.Text = &text
+		}
 		l += textPaddedLen
 
 		i.commitStringHandler(e)
