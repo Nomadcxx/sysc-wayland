@@ -34,6 +34,15 @@ Vendored from wayland-protocols tag 1.45:
 
 `tablet-v2.xml` is present because cursor-shape-v1 `get_tablet_tool_v2` takes a `zwp_tablet_tool_v2`.
 
+Vendored from wayland-protocols tag 1.49:
+
+| Path | Upstream | SHA-256 |
+|---|---|---|
+| `protocols/ext-idle-notify-v1.xml` | `staging/ext-idle-notify/ext-idle-notify-v1.xml` | `e56a9c22684e6b46655f7221b798328e304c1efc8f63f01241a1cf8c070f4c30` |
+| `protocols/ext-session-lock-v1.xml` | `staging/ext-session-lock/ext-session-lock-v1.xml` | `a05df7d95c5e523e457037b3a149484e8064828cda66971f3c7caeb87d597a81` |
+
+The idle row formalizes provenance previously recorded only in `idle/generate.go`.
+
 ## Divergences
 
 | Commit | Invariant | Check | Upstream status |
