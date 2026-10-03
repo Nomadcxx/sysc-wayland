@@ -115,7 +115,11 @@ func TestConnectDropsAdoptedWaylandSocket(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer file.Close()
-		t.Setenv("WAYLAND_SOCKET", strconv.Itoa(int(file.Fd())))
+		fd, err := unix.Dup(int(file.Fd()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("WAYLAND_SOCKET", strconv.Itoa(fd))
 		t.Setenv("WAYLAND_DISPLAY", "wayland-0")
 		t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 
