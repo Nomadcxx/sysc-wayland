@@ -149,8 +149,9 @@ func (ctx *Context) Dispatch() (dispatchErr error) {
 		}
 	}()
 	sender.Dispatch(opcode, fd, data)
+	// The dispatcher owns fd after a normal return, including when its
+	// handler sticks fatalErr. Panic recovery above still closes fd.
 	if ctx.fatalErr != nil {
-		closeReceivedFD(fd)
 		return ctx.fatalErr
 	}
 	return nil
