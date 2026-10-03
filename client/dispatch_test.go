@@ -125,6 +125,69 @@ func TestDispatchClosesQueuedFDsWhenFirstFrameIsFatal(t *testing.T) {
 	}
 }
 
+func TestDispatchKeepsHandlerOwnedFDWhenFatal(t *testing.T) {
+	t.Run("keymap", func(t *testing.T) {
+		ctx, peer := socketPairContext(t)
+		keyboard := NewKeyboard(ctx)
+		owned := -1
+		keyboard.SetKeymapHandler(func(e KeyboardKeymapEvent) {
+			owned = e.Fd
+			ctx.setFatal(errors.New("handler write failed"))
+		})
+		body := make([]byte, 8)
+		PutUint32(body[0:4], 1)
+		PutUint32(body[4:8], 4)
+		pipe := sendFDFrame(t, peer, keyboard.ID(), 0, body)
+
+		err := ctx.Dispatch()
+		if err == nil || err != ctx.fatalErr || !strings.Contains(err.Error(), "handler write failed") {
+			t.Fatalf("Dispatch() error = %v, fatal = %v, want handler write failed", err, ctx.fatalErr)
+		}
+		assertHandlerFDStillOpen(t, owned, pipe)
+	})
+
+	t.Run("data_source_send", func(t *testing.T) {
+		ctx, peer := socketPairContext(t)
+		source := NewDataSource(ctx)
+		owned := -1
+		source.SetSendHandler(func(e DataSourceSendEvent) {
+			owned = e.Fd
+			ctx.setFatal(errors.New("handler write failed"))
+		})
+		mime := "text/plain"
+		body := make([]byte, 4+PaddedLen(len(mime)+1))
+		PutString(body, mime)
+		pipe := sendFDFrame(t, peer, source.ID(), 1, body)
+
+		err := ctx.Dispatch()
+		if err == nil || err != ctx.fatalErr || !strings.Contains(err.Error(), "handler write failed") {
+			t.Fatalf("Dispatch() error = %v, fatal = %v, want handler write failed", err, ctx.fatalErr)
+		}
+		assertHandlerFDStillOpen(t, owned, pipe)
+	})
+}
+
+func assertHandlerFDStillOpen(t *testing.T, fd int, pipe *testPipe) {
+	t.Helper()
+	if fd < 0 {
+		t.Fatal("handler descriptor = -1, want a descriptor")
+	}
+	t.Cleanup(func() { unix.Close(fd) })
+	if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err != nil {
+		t.Fatalf("F_GETFD(handler fd) = %v, want open descriptor", err)
+	}
+	if _, err := unix.Write(pipe.write, []byte{'x'}); err != nil {
+		t.Fatal(err)
+	}
+	var got [1]byte
+	if _, err := unix.Read(fd, got[:]); err != nil {
+		t.Fatal(err)
+	}
+	if got[0] != 'x' {
+		t.Fatalf("received byte = %q, want x", got[0])
+	}
+}
+
 func TestDispatchOwnershipMakesDecoderPanicSticky(t *testing.T) {
 	ctx, peer := socketPairContext(t)
 	proxy := &testDispatcher{dispatch: func(uint32, int, []byte) { panic("bad decoder") }}
