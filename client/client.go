@@ -2281,7 +2281,7 @@ func (e DataSourceError) String() string {
 //
 // Used for feedback during drag-and-drop.
 type DataSourceTargetEvent struct {
-	MimeType string
+	MimeType *string
 }
 type DataSourceTargetHandlerFunc func(DataSourceTargetEvent)
 
@@ -2438,7 +2438,12 @@ func (i *DataSource) Dispatch(opcode uint32, fd int, data []byte) {
 		if mimeTypePaddedLen > len(data)-l {
 			panic("client: truncated event string padding")
 		}
-		e.MimeType = String(data[l : l+mimeTypeLen])
+		if mimeTypeLen == 0 {
+			e.MimeType = nil
+		} else {
+			mimeType := String(data[l : l+mimeTypeLen])
+			e.MimeType = &mimeType
+		}
 		l += mimeTypePaddedLen
 
 		i.targetHandler(e)
