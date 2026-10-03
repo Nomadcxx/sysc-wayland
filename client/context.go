@@ -201,8 +201,16 @@ func Connect(addr string) (*Display, error) {
 				return nil, fmt.Errorf("env WAYLAND_SOCKET is not a valid file descriptor: %q", value)
 			}
 			conn, err := unixConnFromFD(fd)
+			// unixConnFromFD closes fd both when the socket is adopted and when
+			// that adopt fails. Drop the name so a later Connect or a child
+			// falls through to WAYLAND_DISPLAY instead of the closed number.
+			unsetErr := os.Unsetenv("WAYLAND_SOCKET")
 			if err != nil {
-				return nil, fmt.Errorf("env WAYLAND_SOCKET: %w", err)
+				return nil, errors.Join(fmt.Errorf("env WAYLAND_SOCKET: %w", err), unsetErr)
+			}
+			if unsetErr != nil {
+				_ = conn.Close()
+				return nil, unsetErr
 			}
 			ctx.conn = conn
 			return NewDisplay(ctx), nil

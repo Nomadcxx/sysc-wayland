@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -70,6 +71,117 @@ func TestConnectUsesWaylandSocket(t *testing.T) {
 	if err != nil || n != 1 || received[0] != 1 {
 		t.Fatalf("peer read = (%d, %v, %d), want (1, nil, 1)", n, err, received[0])
 	}
+}
+
+func TestConnectDropsAdoptedWaylandSocket(t *testing.T) {
+	t.Run("success falls back later", func(t *testing.T) {
+		runtimeDir := t.TempDir()
+		listenConnectSocket(t, filepath.Join(runtimeDir, "wayland-0"))
+		fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer unix.Close(fds[1])
+		socketValue := strconv.Itoa(fds[0])
+		t.Setenv("WAYLAND_SOCKET", socketValue)
+		t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+		t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+
+		display, err := Connect("")
+		if err != nil {
+			t.Fatalf("Connect(\"\") with WAYLAND_SOCKET: %v", err)
+		}
+		if err := display.Context().Close(); err != nil {
+			t.Fatal(err)
+		}
+		if got, ok := os.LookupEnv("WAYLAND_SOCKET"); ok {
+			t.Fatalf("WAYLAND_SOCKET = %q after a successful adopt", got)
+		}
+
+		again, err := Connect("")
+		if err != nil {
+			t.Fatalf("Connect(\"\") after adopting WAYLAND_SOCKET: %v", err)
+		}
+		if err := again.Context().Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("failed adopt falls back later", func(t *testing.T) {
+		runtimeDir := t.TempDir()
+		listenConnectSocket(t, filepath.Join(runtimeDir, "wayland-0"))
+		file, err := os.CreateTemp(t.TempDir(), "not-a-socket")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		t.Setenv("WAYLAND_SOCKET", strconv.Itoa(int(file.Fd())))
+		t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+		t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+
+		if _, err := Connect(""); err == nil {
+			t.Fatal("Connect(\"\") adopted a regular file")
+		}
+		if got, ok := os.LookupEnv("WAYLAND_SOCKET"); ok {
+			t.Fatalf("WAYLAND_SOCKET = %q after the descriptor was closed", got)
+		}
+
+		display, err := Connect("")
+		if err != nil {
+			t.Fatalf("Connect(\"\") after a failed adopt: %v", err)
+		}
+		if err := display.Context().Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("invalid number stays set", func(t *testing.T) {
+		runtimeDir := t.TempDir()
+		listenConnectSocket(t, filepath.Join(runtimeDir, "wayland-0"))
+		t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+		t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+		for _, value := range []string{"not-a-file-descriptor", "-1"} {
+			t.Run(value, func(t *testing.T) {
+				t.Setenv("WAYLAND_SOCKET", value)
+				_, err := Connect("")
+				if err == nil || !strings.Contains(err.Error(), "WAYLAND_SOCKET") {
+					t.Fatalf("Connect(\"\") error = %v, want a WAYLAND_SOCKET parse error", err)
+				}
+				if got := os.Getenv("WAYLAND_SOCKET"); got != value {
+					t.Fatalf("WAYLAND_SOCKET = %q, want %q", got, value)
+				}
+			})
+		}
+	})
+
+	t.Run("explicit name leaves it set", func(t *testing.T) {
+		socketPath := filepath.Join(t.TempDir(), "wayland-0")
+		listenConnectSocket(t, socketPath)
+		fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer unix.Close(fds[0])
+		defer unix.Close(fds[1])
+		socketValue := strconv.Itoa(fds[0])
+		t.Setenv("WAYLAND_SOCKET", socketValue)
+		t.Setenv("XDG_RUNTIME_DIR", "")
+		t.Setenv("WAYLAND_DISPLAY", "unused")
+
+		display, err := Connect(socketPath)
+		if err != nil {
+			t.Fatalf("Connect(%q): %v", socketPath, err)
+		}
+		if err := display.Context().Close(); err != nil {
+			t.Fatal(err)
+		}
+		if got := os.Getenv("WAYLAND_SOCKET"); got != socketValue {
+			t.Fatalf("WAYLAND_SOCKET = %q, want %q", got, socketValue)
+		}
+		if _, err := unix.FcntlInt(uintptr(fds[0]), unix.F_GETFD, 0); err != nil {
+			t.Fatalf("explicit connect closed WAYLAND_SOCKET fd: %v", err)
+		}
+	})
 }
 
 func TestConnectRejectsInvalidWaylandSocket(t *testing.T) {
