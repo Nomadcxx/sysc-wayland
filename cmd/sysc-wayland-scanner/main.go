@@ -691,8 +691,17 @@ func writeEvent(w io.Writer, ifaceName string, e Event) {
 				fmt.Fprintf(w, "%s Proxy\n", argName)
 			}
 
+		case "string":
+			goType := typeToGoTypeMap[arg.Type]
+			// Wire length 0 is NULL, which a plain string cannot represent.
+			// An empty string is length 1 plus a NUL.
+			if arg.AllowNull {
+				goType = "*" + goType
+			}
+			fmt.Fprintf(w, "%s %s\n", argName, goType)
+
 		case "int", "uint", "fixed",
-			"string", "array", "fd":
+			"array", "fd":
 			fmt.Fprintf(w, "%s %s\n", argName, typeToGoTypeMap[arg.Type])
 		}
 	}
@@ -870,7 +879,16 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 				fmt.Fprintf(w, "%sLen := int(%sWireLen)\n", argNameLower, argNameLower)
 				fmt.Fprintf(w, "%sPaddedLen := %sPaddedLen(%sLen)\n", argNameLower, decoderPrefix, argNameLower)
 				fmt.Fprintf(w, "if %sPaddedLen > len(data)-l { panic(\"client: truncated event string padding\") }\n", argNameLower)
-				fmt.Fprintf(w, "e.%s = %sString(data[l : l+%sLen])\n", argName, decoderPrefix, argNameLower)
+				if arg.AllowNull {
+					fmt.Fprintf(w, "if %sLen == 0 {\n", argNameLower)
+					fmt.Fprintf(w, "e.%s = nil\n", argName)
+					fmt.Fprintf(w, "} else {\n")
+					fmt.Fprintf(w, "%s := %sString(data[l : l+%sLen])\n", argNameLower, decoderPrefix, argNameLower)
+					fmt.Fprintf(w, "e.%s = &%s\n", argName, argNameLower)
+					fmt.Fprintf(w, "}\n")
+				} else {
+					fmt.Fprintf(w, "e.%s = %sString(data[l : l+%sLen])\n", argName, decoderPrefix, argNameLower)
+				}
 				fmt.Fprintf(w, "l += %sPaddedLen\n", argNameLower)
 
 			case "array":

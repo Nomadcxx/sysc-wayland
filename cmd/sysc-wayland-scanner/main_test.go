@@ -173,6 +173,52 @@ func TestScannerBoundsVariableEventFields(t *testing.T) {
 	}
 }
 
+func TestScannerDecodesAllowNullEventString(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "nullable.xml")
+	output := filepath.Join(dir, "nullable.go")
+	writeFixture(t, input, allowNullStringProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", output)
+	generated := string(readFile(t, output))
+
+	if !strings.Contains(generated, "MimeType *string") {
+		t.Fatalf("allow-null event string is not a pointer:\n%s", generated)
+	}
+	if !strings.Contains(generated, "Name string") {
+		t.Fatalf("non-null event string changed type:\n%s", generated)
+	}
+
+	target, ok := eventBody(generated, "case 0:")
+	if !ok {
+		t.Fatal("generated dispatcher has no opcode 0 branch")
+	}
+	for _, want := range []string{
+		"if mimeTypeLen == 0 {",
+		"e.MimeType = nil",
+		"mimeType := client.String(data[l : l+mimeTypeLen])",
+		"e.MimeType = &mimeType",
+	} {
+		if !strings.Contains(target, want) {
+			t.Fatalf("NULL string decoder missing %q:\n%s", want, target)
+		}
+	}
+
+	send, ok := eventBody(generated, "case 1:")
+	if !ok {
+		t.Fatal("generated dispatcher has no opcode 1 branch")
+	}
+	if strings.Contains(send, "e.Name = nil") || strings.Contains(send, "&name") {
+		t.Fatalf("non-null string accepts a length of 0:\n%s", send)
+	}
+	if !strings.Contains(send, "e.Name = client.String(data[l : l+nameLen])") {
+		t.Fatalf("non-null string decoder missing String():\n%s", send)
+	}
+	if _, err := parser.ParseFile(token.NewFileSet(), output, generated, parser.AllErrors); err != nil {
+		t.Fatalf("parse generated output: %v", err)
+	}
+}
+
 func TestScannerMarksDestroyedRegistryZombie(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "fixes.xml")
@@ -313,6 +359,20 @@ const arrayEventProtocol = `<?xml version="1.0" encoding="UTF-8"?>
       <arg name="message" type="string"/>
       <arg name="values" type="array"/>
       <arg name="count" type="uint"/>
+    </event>
+  </interface>
+</protocol>
+`
+
+const allowNullStringProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fixture">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="fixture_source" version="1">
+    <event name="target">
+      <arg name="mime_type" type="string" allow-null="true"/>
+    </event>
+    <event name="named">
+      <arg name="name" type="string"/>
     </event>
   </interface>
 </protocol>
