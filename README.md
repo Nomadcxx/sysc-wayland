@@ -20,6 +20,9 @@ The v0.3.1 release lets a server-created object take an ID whose previous object
 already destroyed. The server sends no `delete_id` for its own objects, so the destroyed proxy
 was still mapped and the reused ID panicked as a duplicate.
 
+The v0.3.2 release adds the generated `sessionlock` package (ext-session-lock-v1, staging,
+wayland-protocols 1.49).
+
 The first consumer will be [`sysc-shell`](https://github.com/Nomadcxx/sysc-shell).
 
 ## Release qualification
@@ -38,14 +41,15 @@ Test the release from a clean directory containing the protocol XML files:
 
 ```bash
 go mod init example.invalid/probe
-mkdir -p xdgshell layershell fractionalscale viewporter textinput cursorshape
+mkdir -p xdgshell layershell fractionalscale viewporter textinput cursorshape sessionlock
 go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg xdgshell -prefix xdg_ -o xdgshell/xdg_shell.go -i protocols/xdg-shell.xml
 go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layershell/layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
 go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg fractionalscale -o fractionalscale/fractional_scale.go -i protocols/fractional-scale-v1.xml
 go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg viewporter -o viewporter/viewporter.go -i protocols/viewporter.xml
 go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg textinput -o textinput/text_input.go -i protocols/text-input-unstable-v3.xml
 go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg cursorshape -o cursorshape/cursor_shape.go -i protocols/cursor-shape-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg cursorshape -o cursorshape/tablet_v2.go -i protocols/tablet-v2.xml
+go run github.com/Nomadxix/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg cursorshape -o cursorshape/tablet_v2.go -i protocols/tablet-v2.xml
+go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.3.1 -pkg sessionlock -o sessionlock/ext_session_lock_v1.go -i protocols/ext-session-lock-v1.xml
 go mod tidy
 go build ./...
 ```
