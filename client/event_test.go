@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -250,5 +251,73 @@ func assertFrame(t *testing.T, sender, opcode uint32, fd int, body []byte, wantS
 	t.Helper()
 	if sender != wantSender || opcode != wantOpcode || fd != -1 || !bytes.Equal(body, wantBody) {
 		t.Fatalf("frame = (%d, %d, %d, %v), want (%d, %d, -1, %v)", sender, opcode, fd, body, wantSender, wantOpcode, wantBody)
+	}
+}
+
+// A read deadline that expires before the first byte of a frame is not a protocol failure:
+// it must leave fatalErr unset so a later read can still process data.
+func TestReadDeadlineAtFrameBoundaryIsNotFatal(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+
+	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, _, err := ctx.ReadMsg(); !errors.Is(err, errReadTimeout) {
+		t.Fatalf("ReadMsg() error = %v, want errReadTimeout", err)
+	}
+	if ctx.fatalErr != nil {
+		t.Fatalf("fatalErr = %v after an idle deadline, want nil", ctx.fatalErr)
+	}
+
+	// Clearing the deadline and delivering a frame must work: the idle timeout did not
+	// desynchronize the stream.
+	if err := ctx.SetReadDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := peer.Write(testFrame(1, 7, []byte{1, 2, 3, 4})); err != nil {
+		t.Fatal(err)
+	}
+	sender, opcode, fd, body, err := ctx.ReadMsg()
+	if err != nil {
+		t.Fatalf("ReadMsg() after an idle deadline: %v", err)
+	}
+	assertFrame(t, sender, opcode, fd, body, 1, 7, []byte{1, 2, 3, 4})
+}
+
+// A deadline that fires after part of a frame was consumed leaves the stream desynchronized
+// and must stay sticky-fatal.
+func TestReadDeadlineAfterPartialHeaderIsFatal(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+
+	if _, err := peer.Write([]byte{1, 2, 3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, _, err := ctx.ReadMsg(); err == nil || errors.Is(err, errReadTimeout) {
+		t.Fatalf("ReadMsg() error = %v, want a sticky fatal error", err)
+	}
+
+	if err := ctx.SetReadDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, _, err := ctx.ReadMsg(); !errors.Is(err, ctx.fatalErr) {
+		t.Fatalf("ReadMsg() after a partial-header timeout = %v, want the sticky fatal error", err)
+	}
+}
+
+// Dispatch must not poison the connection when the read deadline expires at a frame boundary.
+func TestDispatchIdleDeadlineIsNotFatal(t *testing.T) {
+	ctx, _ := socketPairContext(t)
+
+	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); !errors.Is(err, errReadTimeout) {
+		t.Fatalf("Dispatch() error = %v, want errReadTimeout", err)
+	}
+	if ctx.fatalErr != nil {
+		t.Fatalf("fatalErr = %v after an idle deadline, want nil", ctx.fatalErr)
 	}
 }

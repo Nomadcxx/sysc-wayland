@@ -19,6 +19,19 @@ const maxFDsPerControlMessage = 256
 
 var oobSpace = unix.CmsgSpace(maxFDsPerControlMessage * 4)
 
+// errReadTimeout marks a read deadline that expired at a frame boundary: no byte of the
+// current frame was consumed, so the byte stream is still synchronized and a later read can
+// proceed. ReadMsg returns it without setting fatalErr, and Dispatch propagates it without
+// poisoning the connection. A deadline that fires after part of a frame was read is a
+// different case and stays sticky-fatal.
+var errReadTimeout = errors.New("client: read deadline exceeded at frame boundary")
+
+// isDeadline reports whether err is a deadline expiry (a net.Error whose Timeout is true).
+func isDeadline(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
 func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byte, err error) {
 	if ctx.fatalErr != nil {
 		return 0, 0, -1, nil, ctx.fatalErr
@@ -29,7 +42,10 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 	}
 
 	header := make([]byte, 8)
-	if err := ctx.readExact(header); err != nil {
+	if n, err := ctx.readExact(header); err != nil {
+		if n == 0 && isDeadline(err) {
+			return 0, 0, -1, nil, fmt.Errorf("%w: %w", errReadTimeout, err)
+		}
 		return fail(fmt.Errorf("ctx.ReadMsg: header: %w", err))
 	}
 
@@ -50,7 +66,7 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 	msgSize := int(size - 8)
 	msg = make([]byte, msgSize)
 	if msgSize > 0 {
-		if err := ctx.readExact(msg); err != nil {
+		if _, err := ctx.readExact(msg); err != nil {
 			return fail(fmt.Errorf("ctx.ReadMsg: body: %w", err))
 		}
 	}
@@ -60,7 +76,7 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 	return senderID, opcode, fd, msg, nil
 }
 
-func (ctx *Context) readExact(dst []byte) error {
+func (ctx *Context) readExact(dst []byte) (int, error) {
 	return readExactWith(ctx.conn.ReadMsgUnix, dst, &ctx.pendingFDs)
 }
 
@@ -79,40 +95,45 @@ func (ctx *Context) takeFD() int {
 
 type readMsgUnixFunc func([]byte, []byte) (int, int, int, *net.UnixAddr, error)
 
-func readExactWith(read readMsgUnixFunc, dst []byte, fds *[]int) error {
+// readExactWith reads len(dst) bytes. On error it also returns how many bytes of dst were
+// consumed before the error, so callers can tell a frame-boundary failure (0 bytes) from a
+// partial read that desynchronized the stream.
+func readExactWith(read readMsgUnixFunc, dst []byte, fds *[]int) (int, error) {
+	consumed := 0
 	oob := make([]byte, oobSpace)
 	for len(dst) > 0 {
 		n, oobn, flags, _, readErr := read(dst, oob)
 		if oobn > 0 {
 			received, err := getFdsFromOob(oob, oobn, "frame")
 			if err != nil {
-				return err
+				return consumed, err
 			}
 			*fds = append(*fds, received...)
 		}
 		if flags&(unix.MSG_CTRUNC|unix.MSG_TRUNC) != 0 {
-			return fmt.Errorf("truncated socket message flags %#x", flags)
+			return consumed, fmt.Errorf("truncated socket message flags %#x", flags)
 		}
 		if n > len(dst) {
-			return fmt.Errorf("socket returned %d bytes for %d-byte buffer", n, len(dst))
+			return consumed, fmt.Errorf("socket returned %d bytes for %d-byte buffer", n, len(dst))
 		}
 		if n > 0 {
 			dst = dst[n:]
+			consumed += n
 		}
 		if readErr != nil {
 			if len(dst) == 0 {
-				return nil
+				return consumed, nil
 			}
 			if errors.Is(readErr, io.EOF) {
-				return io.ErrUnexpectedEOF
+				return consumed, io.ErrUnexpectedEOF
 			}
-			return readErr
+			return consumed, readErr
 		}
 		if n == 0 {
-			return io.ErrUnexpectedEOF
+			return consumed, io.ErrUnexpectedEOF
 		}
 	}
-	return nil
+	return consumed, nil
 }
 
 func closeFDs(fds []int) {
