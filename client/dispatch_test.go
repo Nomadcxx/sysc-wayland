@@ -524,3 +524,46 @@ func assertPipeReadEndClosed(t *testing.T, pipe *testPipe) {
 		t.Fatalf("write error = %v, want EPIPE", err)
 	}
 }
+
+// wl_display has no destructor request, so Display.Destroy only zombies it locally. It still
+// receives delete_id and error; those must not be dropped with the zombie short-circuit.
+func TestDispatchKeepsDisplayDeleteIdAfterDestroy(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	display := NewDisplay(ctx)
+	registry := NewRegistry(ctx)
+
+	if err := display.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	body := make([]byte, 4)
+	PutUint32(body, registry.ID())
+	if _, err := peer.Write(testFrame(display.ID(), 1, body)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("Dispatch() error = %v", err)
+	}
+	if ctx.GetProxy(registry.ID()) != nil {
+		t.Fatalf("delete_id after Display.Destroy() was discarded: object %d is still registered", registry.ID())
+	}
+}
+
+func TestDispatchKeepsDisplayErrorAfterDestroy(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	display := NewDisplay(ctx)
+
+	if err := display.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	body := make([]byte, 16)
+	PutUint32(body[0:4], display.ID())
+	PutUint32(body[4:8], uint32(DisplayErrorNoMemory))
+	PutString(body[8:], "bad")
+	if _, err := peer.Write(testFrame(display.ID(), 0, body)); err != nil {
+		t.Fatal(err)
+	}
+	err := ctx.Dispatch()
+	if err == nil || !strings.Contains(err.Error(), "wl_display.error") {
+		t.Fatalf("Dispatch() error = %v, want wl_display.error after Display.Destroy()", err)
+	}
+}
