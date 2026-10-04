@@ -321,3 +321,61 @@ func TestDispatchIdleDeadlineIsNotFatal(t *testing.T) {
 		t.Fatalf("fatalErr = %v after an idle deadline, want nil", ctx.fatalErr)
 	}
 }
+
+func TestReadDeadlineAfterPartialBodyClosesFDs(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	pipe := newPipe(t)
+	frame := testFrame(1, 0, []byte{1, 2, 3, 4})
+	if _, _, err := peer.WriteMsgUnix(frame[:9], unix.UnixRights(pipe.read), nil); err != nil {
+		t.Fatal(err)
+	}
+	pipe.closeRead(t)
+	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, _, err := ctx.ReadMsg()
+	if err == nil || errors.Is(err, errReadTimeout) || ctx.fatalErr != err {
+		t.Fatalf("ReadMsg() error = %v, fatal = %v, want a sticky partial-body timeout", err, ctx.fatalErr)
+	}
+	if len(ctx.pendingFDs) != 0 {
+		t.Fatalf("pending descriptors = %v after fatal timeout", ctx.pendingFDs)
+	}
+	assertPipeReadEndClosed(t, pipe)
+	if err := ctx.SetReadDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if writeErr := ctx.WriteMsg(testFrame(1, 0, nil), nil); writeErr != err {
+		t.Fatalf("WriteMsg() error = %v, want the sticky timeout %v", writeErr, err)
+	}
+}
+
+func TestDispatchIdleDeadlinePreservesQueuedFD(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	pipe := newPipe(t)
+	ctx.pendingFDs = append(ctx.pendingFDs, pipe.read)
+	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); !errors.Is(err, errReadTimeout) || ctx.fatalErr != nil {
+		t.Fatalf("Dispatch() error = %v, fatal = %v, want a recoverable idle timeout", err, ctx.fatalErr)
+	}
+	if _, err := unix.FcntlInt(uintptr(pipe.read), unix.F_GETFD, 0); err != nil {
+		t.Fatalf("queued descriptor was closed by idle timeout: %v", err)
+	}
+	if err := ctx.SetReadDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	proxy := &testDispatcher{dispatch: func(_ uint32, fd int, _ []byte) {
+		if fd != pipe.read {
+			t.Fatalf("received descriptor = %d, want queued descriptor %d", fd, pipe.read)
+		}
+		pipe.closeRead(t)
+	}}
+	ctx.Register(proxy)
+	if _, err := peer.Write(testFrame(proxy.ID(), 0, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("Dispatch() after clearing idle deadline: %v", err)
+	}
+}
