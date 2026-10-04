@@ -10,9 +10,18 @@ import (
 
 var ErrPartialFrame = errors.New("client: partial Wayland frame write")
 
+// ErrFrameSize reports a request that cannot be sent as a single Wayland message: its
+// marshalled length does not fit the 16-bit size field (more than 65535 bytes) or is not
+// 4-byte aligned. The size field would wrap and desynchronize the connection, so WriteMsg
+// refuses the request before writing any byte and leaves the connection usable.
+var ErrFrameSize = errors.New("client: request is not a valid single Wayland message")
+
 func (ctx *Context) WriteMsg(b []byte, oob []byte) error {
 	if ctx.fatalErr != nil {
 		return ctx.fatalErr
+	}
+	if len(b) > 0xffff || len(b)%4 != 0 {
+		return fmt.Errorf("%w: %d bytes", ErrFrameSize, len(b))
 	}
 	if err := writeFrame(ctx.conn.WriteMsgUnix, ctx.conn.Write, b, oob); err != nil {
 		return ctx.setFatal(err)

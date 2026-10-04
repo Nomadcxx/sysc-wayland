@@ -94,3 +94,34 @@ func TestWriteFrameReturnsFatalErrorAfterPartialWrite(t *testing.T) {
 		t.Fatalf("writeFrame() error = %v, want joined partial-frame and write errors", err)
 	}
 }
+
+// A request whose marshalled length does not fit the 16-bit Wayland size field would wrap it
+// and desynchronize the connection. WriteMsg must refuse it before writing any byte and leave
+// the connection usable.
+func TestWriteMsgRefusesOversizeFrame(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+
+	oversize := make([]byte, 0x10000) // 65536 > 65535
+	if err := ctx.WriteMsg(oversize, nil); !errors.Is(err, ErrFrameSize) {
+		t.Fatalf("WriteMsg() oversize error = %v, want ErrFrameSize", err)
+	}
+	if ctx.fatalErr != nil {
+		t.Fatalf("fatalErr = %v after a refused oversize frame, want nil", ctx.fatalErr)
+	}
+
+	unaligned := make([]byte, 10) // not a multiple of 4
+	if err := ctx.WriteMsg(unaligned, nil); !errors.Is(err, ErrFrameSize) {
+		t.Fatalf("WriteMsg() unaligned error = %v, want ErrFrameSize", err)
+	}
+
+	// Nothing reached the socket, and a valid frame still writes normally.
+	if pending, err := pendingBytes(peer); err != nil || pending != 0 {
+		t.Fatalf("peer pending = %d, %v, want 0", pending, err)
+	}
+	if err := ctx.WriteMsg(testFrame(1, 7, []byte{1, 2, 3, 4}), nil); err != nil {
+		t.Fatalf("WriteMsg() valid frame: %v", err)
+	}
+	if pending, err := pendingBytes(peer); err != nil || pending == 0 {
+		t.Fatalf("peer pending = %d, %v, want the valid frame", pending, err)
+	}
+}
