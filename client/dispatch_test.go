@@ -530,21 +530,31 @@ func assertPipeReadEndClosed(t *testing.T, pipe *testPipe) {
 func TestDispatchKeepsDisplayDeleteIdAfterDestroy(t *testing.T) {
 	ctx, peer := socketPairContext(t)
 	display := NewDisplay(ctx)
+	buffer := NewBuffer(ctx)
 	registry := NewRegistry(ctx)
 
+	if err := buffer.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	if !buffer.IsZombie() || ctx.GetProxy(buffer.ID()) != buffer {
+		t.Fatal("destroyed buffer must stay registered until delete_id")
+	}
 	if err := display.Destroy(); err != nil {
 		t.Fatal(err)
 	}
 	body := make([]byte, 4)
-	PutUint32(body, registry.ID())
+	PutUint32(body, buffer.ID())
 	if _, err := peer.Write(testFrame(display.ID(), 1, body)); err != nil {
 		t.Fatal(err)
 	}
 	if err := ctx.Dispatch(); err != nil {
 		t.Fatalf("Dispatch() error = %v", err)
 	}
-	if ctx.GetProxy(registry.ID()) != nil {
-		t.Fatalf("delete_id after Display.Destroy() was discarded: object %d is still registered", registry.ID())
+	if ctx.GetProxy(buffer.ID()) != nil {
+		t.Fatalf("delete_id after Display.Destroy() was discarded: object %d is still registered", buffer.ID())
+	}
+	if ctx.GetProxy(registry.ID()) != registry {
+		t.Fatal("delete_id removed an unrelated live object")
 	}
 }
 
@@ -565,5 +575,11 @@ func TestDispatchKeepsDisplayErrorAfterDestroy(t *testing.T) {
 	err := ctx.Dispatch()
 	if err == nil || !strings.Contains(err.Error(), "wl_display.error") {
 		t.Fatalf("Dispatch() error = %v, want wl_display.error after Display.Destroy()", err)
+	}
+	if ctx.fatalErr != err {
+		t.Fatalf("fatalErr = %v, want the recorded display error %v", ctx.fatalErr, err)
+	}
+	if writeErr := ctx.WriteMsg(testFrame(display.ID(), 0, nil), nil); writeErr != err {
+		t.Fatalf("WriteMsg() error = %v, want the recorded display error %v", writeErr, err)
 	}
 }
