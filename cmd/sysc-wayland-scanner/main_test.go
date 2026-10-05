@@ -219,6 +219,59 @@ func TestScannerDecodesAllowNullEventString(t *testing.T) {
 	}
 }
 
+func TestScannerEncodesAllowNullRequestString(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "nullable_request.xml")
+	output := filepath.Join(dir, "nullable_request.go")
+	writeFixture(t, input, allowNullRequestStringProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", output)
+	generated := string(readFile(t, output))
+
+	accept, ok := funcBody(generated, "func (i *FixtureOffer) Accept(")
+	if !ok {
+		t.Fatal("generated output has no Accept method")
+	}
+	if !strings.Contains(accept, "mimeType *string") {
+		t.Fatalf("allow-null request string is not a pointer:\n%s", accept)
+	}
+	// Nothing in the generated code checks that the body walk l agrees with
+	// _reqBufLen, so assert both sides: the size counts the length field, and the
+	// null branch advances l by the 4 bytes it wrote so the trailing arg still
+	// lands where _reqBufLen says the frame ends.
+	for _, want := range []string{
+		"mimeTypeLen := 0",
+		"if mimeType != nil {",
+		"mimeTypeLen = client.PaddedLen(len(*mimeType) + 1)",
+		"_reqBufLen := 8 + 4 + (4 + mimeTypeLen) + 4",
+		"if mimeType == nil {\n\t\tclient.PutUint32(_reqBuf[l:l+4], 0)\n\t\tl += 4\n\t} else {",
+		"client.PutString(_reqBuf[l:l+(4+mimeTypeLen)], *mimeType)",
+		"client.PutUint32(_reqBuf[l:l+4], uint32(flags))",
+	} {
+		if !strings.Contains(accept, want) {
+			t.Fatalf("NULL request string encoder missing %q:\n%s", want, accept)
+		}
+	}
+
+	receive, ok := funcBody(generated, "func (i *FixtureOffer) Receive(")
+	if !ok {
+		t.Fatal("generated output has no Receive method")
+	}
+	if !strings.Contains(receive, "mimeType string") || strings.Contains(receive, "mimeType *string") {
+		t.Fatalf("non-null request string changed type:\n%s", receive)
+	}
+	if strings.Contains(receive, "mimeType == nil") {
+		t.Fatalf("non-null request string accepts NULL:\n%s", receive)
+	}
+	if !strings.Contains(receive, "client.PutString(_reqBuf[l:l+(4+mimeTypeLen)], mimeType)") {
+		t.Fatalf("non-null request string encoder missing PutString:\n%s", receive)
+	}
+
+	if _, err := parser.ParseFile(token.NewFileSet(), output, generated, parser.AllErrors); err != nil {
+		t.Fatalf("parse generated output: %v", err)
+	}
+}
+
 func TestScannerMarksDestroyedRegistryZombie(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "fixes.xml")
@@ -378,6 +431,22 @@ const allowNullStringProtocol = `<?xml version="1.0" encoding="UTF-8"?>
 </protocol>
 `
 
+const allowNullRequestStringProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fixture">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="fixture_offer" version="3">
+    <request name="accept">
+      <arg name="serial" type="uint"/>
+      <arg name="mime_type" type="string" allow-null="true"/>
+      <arg name="flags" type="uint"/>
+    </request>
+    <request name="receive">
+      <arg name="mime_type" type="string"/>
+    </request>
+  </interface>
+</protocol>
+`
+
 const destroyRegistryProtocol = `<?xml version="1.0" encoding="UTF-8"?>
 <protocol name="wayland">
   <copyright>Fixture copyright.</copyright>
@@ -464,6 +533,20 @@ func eventBody(source, branch string) (string, bool) {
 	rest := source[start+len(branch):]
 	if end := strings.Index(rest, "\tcase "); end >= 0 {
 		return rest[:end], true
+	}
+	return rest, true
+}
+
+// funcBody returns the generated source of one function, so a test can assert
+// on one request without matching the whole file.
+func funcBody(source, signature string) (string, bool) {
+	start := strings.Index(source, signature)
+	if start < 0 {
+		return "", false
+	}
+	rest := source[start:]
+	if end := strings.Index(rest[1:], "\nfunc "); end >= 0 {
+		return rest[:end+1], true
 	}
 	return rest, true
 }
