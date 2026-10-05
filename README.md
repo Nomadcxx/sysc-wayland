@@ -1,56 +1,133 @@
-# sysc-wayland
+<p align="center"><img src="assets/wordmark.png" alt="sysc-wayland" height="120"></p>
 
-`sysc-wayland` is the pure-Go Wayland foundation for the sysc projects. It owns wire framing, file-descriptor transfer, proxy lifecycle, core generated bindings, and protocol generation.
+<p align="center"><strong>Pure-Go Wayland transport and protocol bindings.</strong></p>
 
-The project targets Linux. It does not carry cross-platform transport abstractions or compositor policy.
+<p align="center">The shared foundation under sysc-shell, sysc-lock, sysc-clipboard and sysc-terminal: wire framing, file-descriptor transfer, proxy lifecycle, and a protocol generator.</p>
 
-The project starts as a focused extraction from [`dankgo`](https://github.com/AvengeMedia/dankgo) at
-commit `10434658325c819efaf063f48eec4ae36555727e`. It does not import the rest of `dankgo`. [UPSTREAM.md](UPSTREAM.md)
-records copied paths, licences, and local divergences.
+## What it is
 
-The v0.2.0 release adds generated `textinput` and `cursorshape` packages (text-input-v3 and
-cursor-shape-v1, with tablet-v2 types required by cursor-shape). The `client` package and
-`sysc-wayland-scanner` remain the foundation. The v0.3.0 release adds the generated `idle`
-package (ext-idle-notify-v1, staging, wayland-protocols 1.49).
+sysc-wayland is the Wayland client library the rest of the ecosystem builds on. It speaks the
+Wayland wire protocol directly from Go — no CGO, no libwayland — and generates typed bindings from
+protocol XML with its own scanner.
 
-The v0.2.2 release queues coalesced Wayland file descriptors and generates opcode metadata so FD
-events remain correctly associated when non-FD events share a socket read.
+It was extracted from [dankgo](https://github.com/AvengeMedia/dankgo) at commit `1043465`; the
+upstream paths and licences are recorded in [UPSTREAM.md](UPSTREAM.md).
 
-The v0.3.1 release lets a server-created object take an ID whose previous object the client
-already destroyed. The server sends no `delete_id` for its own objects, so the destroyed proxy
-was still mapped and the reused ID panicked as a duplicate.
+## How it fits together
 
-The first consumer will be [`sysc-shell`](https://github.com/Nomadcxx/sysc-shell).
+```mermaid
+flowchart LR
+    greet["sysc-greet<br/>graphical greeter"] -->|starts configured session| shell["sysc-shell<br/>desktop shell"]
 
-## Release qualification
+    subgraph session["Session"]
+        lock["sysc-lock<br/>session locker"]
+    end
 
-Run the repository gate from the module root:
+    subgraph daemons["Companion daemons"]
+        notify["sysc-notify<br/>notifications"]
+        clipboard["sysc-clipboard<br/>clipboard history"]
+        tray["sysc-tray<br/>system tray"]
+    end
+
+    subgraph wallpaper["Wallpaper and idle"]
+        gslapper["gSlapper<br/>video wallpaper"]
+        terminal["sysc-terminal<br/>terminal effects"]
+        walls["sysc-walls<br/>idle screensaver"]
+    end
+
+    subgraph libs["Shared Go libraries"]
+        wayland["sysc-wayland<br/>Wayland transport"]
+        launch["sysc-launch<br/>app launcher"]
+        metrics["sysc-metrics<br/>system telemetry"]
+    end
+
+    plugins["sysc-plugins<br/>plugin source"]
+
+    shell -->|spawns| session
+    shell -->|connects to| daemons
+    shell -->|drives| wallpaper
+    shell -->|links| libs
+    shell -->|installs from| plugins
+
+    classDef current fill:#7aa2f7,stroke:#1a1b26,color:#1a1b26,stroke-width:2px
+    class wayland current
+```
+
+[The sysc ecosystem](https://github.com/Nomadcxx/sysc-shell/blob/main/docs/ecosystem.md) explains
+each connection, socket and version pin.
+
+## Features
+
+- **Pure Go, no CGO.** The transport's only non-standard dependency is `golang.org/x/sys/unix`
+- **One goroutine owns a connection** and every proxy created from it
+- **Wire framing** with ancillary file-descriptor handling across fragmented reads and partial writes
+- **Proxy lifecycle** with ID reuse: a server ID replaces a zombie proxy, and a live duplicate panics
+- **Generated bindings** for the Wayland core plus `textinput`, `cursorshape` (with tablet-v2),
+  `idle` and `sessionlock`
+- **Opcode metadata**: generated types identify events that carry file descriptors
+- **Connects** by adopting a `WAYLAND_SOCKET` file descriptor, or using `WAYLAND_DISPLAY`
+  (default `wayland-0`), with relative socket names resolved under `XDG_RUNTIME_DIR`
+
+## Releases
+
+| Tag | Adds |
+|---|---|
+| v0.1.0 | Core transport, proxy lifecycle, generated core bindings |
+| v0.2.0 | `textinput` and `cursorshape` |
+| v0.2.1 | An object argument in an event no longer registers a proxy |
+| v0.2.2 | Coalesced FD ordering and opcode metadata |
+| v0.3.0 | `idle` (ext-idle-notify-v1) |
+| v0.3.1 | ID reuse fix |
+
+The `sessionlock` package (ext-session-lock-v1) is included on this branch and tagged
+`v0.3.2-rc.1`; it has no stable release yet.
+
+## Install
+
+Run inside an existing Go module with Go 1.26 or later:
 
 ```bash
-go mod tidy
-git diff --exit-code -- go.mod go.sum
+go get github.com/Nomadcxx/sysc-wayland@v0.3.1
+```
+
+For the `sessionlock` prerelease, use `go get github.com/Nomadcxx/sysc-wayland@v0.3.2-rc.1`.
+
+Packages: `client`, `textinput`, `cursorshape`, `idle`, `sessionlock`.
+
+## Generating bindings
+
+The scanner is `cmd/sysc-wayland-scanner`:
+
+```bash
+go run ./cmd/sysc-wayland-scanner -i protocols/wayland.xml -o /tmp/sysc-wayland-core.go -pkg client -prefix wl
+```
+
+Flags: `-i` input XML, `-o` output Go file, `-pkg` package name, `-prefix`, `-suffix`, and
+`-xdg-shell-import` for protocols that reference external `xdg_*` types. The repo ships six XMLs in
+`protocols/`. Fetch xdg-shell, fractional-scale and viewporter from wayland-protocols;
+wlr-layer-shell comes from wlr-protocols. In-repo invocations are `//go:generate` lines next to each package.
+
+## Development
+
+```bash
 go test -race ./...
 go vet ./...
 go build ./...
+go generate ./...   # regenerate bindings with the pinned local scanner
 ```
 
-Test the release from a clean directory containing the protocol XML files:
+Dependency cleanliness check: `go mod tidy && git diff --exit-code -- go.mod go.sum`.
 
-```bash
-go mod init example.invalid/probe
-mkdir -p xdgshell layershell fractionalscale viewporter textinput cursorshape
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg xdgshell -prefix xdg_ -o xdgshell/xdg_shell.go -i protocols/xdg-shell.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg layershell -xdg-shell-import example.invalid/probe/xdgshell -o layershell/layer_shell.go -i protocols/wlr-layer-shell-unstable-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg fractionalscale -o fractionalscale/fractional_scale.go -i protocols/fractional-scale-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg viewporter -o viewporter/viewporter.go -i protocols/viewporter.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg textinput -o textinput/text_input.go -i protocols/text-input-unstable-v3.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg cursorshape -o cursorshape/cursor_shape.go -i protocols/cursor-shape-v1.xml
-go run github.com/Nomadcxx/sysc-wayland/cmd/sysc-wayland-scanner@v0.2.2 -pkg cursorshape -o cursorshape/tablet_v2.go -i protocols/tablet-v2.xml
-go mod tidy
-go build ./...
-```
+## Documentation
 
-## Licence
+- [The sysc ecosystem](https://github.com/Nomadcxx/sysc-shell/blob/main/docs/ecosystem.md)
+- [UPSTREAM.md](UPSTREAM.md) — extraction provenance and divergences
 
-`sysc-wayland` uses the [BSD 3-Clause License](LICENSE). Extracted upstream code retains its copyright
-notices and subtree licences.
+## License
+
+BSD-3-Clause. Upstream notices are in [LICENSES/](LICENSES/).
+
+---
+
+<a href="https://github.com/Nomadcxx"><img src="https://raw.githubusercontent.com/Nomadcxx/Nomadcxx/main/assets/rama-mark.svg" height="22" alt="RAMA"></a> — terminal-native tooling for the linux desktop.
+[More projects →](https://github.com/Nomadcxx) · [Sponsor](https://github.com/sponsors/Nomadcxx) ❤️
