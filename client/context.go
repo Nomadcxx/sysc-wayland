@@ -133,8 +133,14 @@ func (ctx *Context) Dispatch() (dispatchErr error) {
 		fd = -1
 	}
 	if proxy.IsZombie() {
-		closeReceivedFD(fd)
-		return nil
+		// wl_display has no destructor request, so Display.Destroy only zombies it locally: the
+		// object is still the one that receives delete_id and error. Dropping those would leak
+		// object IDs and hide a protocol error, so the display keeps handling its own events.
+		// Every other zombie still absorbs in-flight events.
+		if _, isDisplay := proxy.(*Display); !isDisplay {
+			closeReceivedFD(fd)
+			return nil
+		}
 	}
 	sender, ok := proxy.(Dispatcher)
 	if !ok {
