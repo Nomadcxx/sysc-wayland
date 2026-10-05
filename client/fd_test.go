@@ -170,7 +170,7 @@ func TestReadFrameRejectsControlTruncation(t *testing.T) {
 	}
 	var fds []int
 
-	err := readExactWith(read, make([]byte, 8), &fds)
+	_, err := readExactWith(read, make([]byte, 8), &fds)
 	if err == nil || !strings.Contains(err.Error(), "truncated") {
 		t.Fatalf("readExactWith() error = %v, want truncation error", err)
 	}
