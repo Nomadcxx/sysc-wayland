@@ -19,12 +19,28 @@ const maxFDsPerControlMessage = 256
 
 var oobSpace = unix.CmsgSpace(maxFDsPerControlMessage * 4)
 
-// errReadTimeout marks a read deadline that expired at a frame boundary: no byte of the
+// ErrReadTimeout marks a read deadline that expired at a frame boundary: no byte of the
 // current frame was consumed, so the byte stream is still synchronized and a later read can
 // proceed. ReadMsg returns it without setting fatalErr, and Dispatch propagates it without
 // poisoning the connection. A deadline that fires after part of a frame was read is a
 // different case and stays sticky-fatal.
-var errReadTimeout = errors.New("client: read deadline exceeded at frame boundary")
+//
+// A caller that sets Context.SetReadDeadline should match on this to tell a benign idle
+// timeout from a protocol failure, and keep dispatching after the former:
+//
+//	for {
+//		err := ctx.Dispatch()
+//		if errors.Is(err, client.ErrReadTimeout) {
+//			continue
+//		}
+//		if err != nil {
+//			return err
+//		}
+//	}
+//
+// Without that distinction the caller has to treat every deadline as fatal, which discards a
+// connection that is still usable.
+var ErrReadTimeout = errors.New("client: read deadline exceeded at frame boundary")
 
 // isDeadline reports whether err is a deadline expiry (a net.Error whose Timeout is true).
 func isDeadline(err error) bool {
@@ -44,7 +60,7 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 	header := make([]byte, 8)
 	if n, err := ctx.readExact(header); err != nil {
 		if n == 0 && isDeadline(err) {
-			return 0, 0, -1, nil, fmt.Errorf("%w: %w", errReadTimeout, err)
+			return 0, 0, -1, nil, fmt.Errorf("%w: %w", ErrReadTimeout, err)
 		}
 		return fail(fmt.Errorf("ctx.ReadMsg: header: %w", err))
 	}
