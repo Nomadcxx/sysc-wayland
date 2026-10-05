@@ -123,7 +123,7 @@ func (ctx *Context) Dispatch() (dispatchErr error) {
 	if err != nil {
 		// An idle deadline at a frame boundary consumed no bytes and is not a protocol
 		// failure, so propagate it without poisoning the connection.
-		if errors.Is(err, errReadTimeout) {
+		if errors.Is(err, ErrReadTimeout) {
 			return err
 		}
 		return ctx.setFatal(fmt.Errorf("%w: %w", ErrDispatchUnableToReadMsg, err))

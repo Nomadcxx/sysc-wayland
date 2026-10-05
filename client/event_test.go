@@ -262,8 +262,8 @@ func TestReadDeadlineAtFrameBoundaryIsNotFatal(t *testing.T) {
 	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, _, err := ctx.ReadMsg(); !errors.Is(err, errReadTimeout) {
-		t.Fatalf("ReadMsg() error = %v, want errReadTimeout", err)
+	if _, _, _, _, err := ctx.ReadMsg(); !errors.Is(err, ErrReadTimeout) {
+		t.Fatalf("ReadMsg() error = %v, want ErrReadTimeout", err)
 	}
 	if ctx.fatalErr != nil {
 		t.Fatalf("fatalErr = %v after an idle deadline, want nil", ctx.fatalErr)
@@ -295,7 +295,7 @@ func TestReadDeadlineAfterPartialHeaderIsFatal(t *testing.T) {
 	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, _, err := ctx.ReadMsg(); err == nil || errors.Is(err, errReadTimeout) {
+	if _, _, _, _, err := ctx.ReadMsg(); err == nil || errors.Is(err, ErrReadTimeout) {
 		t.Fatalf("ReadMsg() error = %v, want a sticky fatal error", err)
 	}
 
@@ -314,8 +314,8 @@ func TestDispatchIdleDeadlineIsNotFatal(t *testing.T) {
 	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctx.Dispatch(); !errors.Is(err, errReadTimeout) {
-		t.Fatalf("Dispatch() error = %v, want errReadTimeout", err)
+	if err := ctx.Dispatch(); !errors.Is(err, ErrReadTimeout) {
+		t.Fatalf("Dispatch() error = %v, want ErrReadTimeout", err)
 	}
 	if ctx.fatalErr != nil {
 		t.Fatalf("fatalErr = %v after an idle deadline, want nil", ctx.fatalErr)
@@ -334,7 +334,7 @@ func TestReadDeadlineAfterPartialBodyClosesFDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, _, _, err := ctx.ReadMsg()
-	if err == nil || errors.Is(err, errReadTimeout) || ctx.fatalErr != err {
+	if err == nil || errors.Is(err, ErrReadTimeout) || ctx.fatalErr != err {
 		t.Fatalf("ReadMsg() error = %v, fatal = %v, want a sticky partial-body timeout", err, ctx.fatalErr)
 	}
 	if len(ctx.pendingFDs) != 0 {
@@ -356,7 +356,7 @@ func TestDispatchIdleDeadlinePreservesQueuedFD(t *testing.T) {
 	if err := ctx.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctx.Dispatch(); !errors.Is(err, errReadTimeout) || ctx.fatalErr != nil {
+	if err := ctx.Dispatch(); !errors.Is(err, ErrReadTimeout) || ctx.fatalErr != nil {
 		t.Fatalf("Dispatch() error = %v, fatal = %v, want a recoverable idle timeout", err, ctx.fatalErr)
 	}
 	if _, err := unix.FcntlInt(uintptr(pipe.read), unix.F_GETFD, 0); err != nil {
