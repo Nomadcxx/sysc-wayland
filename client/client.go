@@ -1800,9 +1800,14 @@ func NewDataOffer(ctx *Context) *DataOffer {
 //
 //	serial: serial number of the accept request
 //	mimeType: mime type accepted by the client
-func (i *DataOffer) Accept(serial uint32, mimeType string) error {
+//
+// A nil mimeType sends the protocol NULL.
+func (i *DataOffer) Accept(serial uint32, mimeType *string) error {
 	const opcode = 0
-	mimeTypeLen := PaddedLen(len(mimeType) + 1)
+	mimeTypeLen := 0
+	if mimeType != nil {
+		mimeTypeLen = PaddedLen(len(*mimeType) + 1)
+	}
 	_reqBufLen := 8 + 4 + (4 + mimeTypeLen)
 	_reqBuf := make([]byte, _reqBufLen)
 	l := 0
@@ -1812,8 +1817,13 @@ func (i *DataOffer) Accept(serial uint32, mimeType string) error {
 	l += 4
 	PutUint32(_reqBuf[l:l+4], uint32(serial))
 	l += 4
-	PutString(_reqBuf[l:l+(4+mimeTypeLen)], mimeType)
-	l += (4 + mimeTypeLen)
+	if mimeType == nil {
+		PutUint32(_reqBuf[l:l+4], 0)
+		l += 4
+	} else {
+		PutString(_reqBuf[l:l+(4+mimeTypeLen)], *mimeType)
+		l += (4 + mimeTypeLen)
+	}
 	err := i.Context().WriteMsg(_reqBuf, nil)
 	return err
 }

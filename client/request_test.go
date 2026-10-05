@@ -183,3 +183,36 @@ func TestWriteMsgAcceptsLargestAlignedFrame(t *testing.T) {
 		t.Fatal("largest aligned frame was changed during the write")
 	}
 }
+
+// wl_data_offer.accept takes an allow-null string: NULL means "not accepted"
+// and must be encoded as a zero length field with no payload, while an empty
+// string stays length 1 plus NUL.
+func TestDataOfferAcceptEncodesNullMimeType(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	offer := NewDataOffer(ctx)
+
+	if err := offer.Accept(7, nil); err != nil {
+		t.Fatalf("Accept(nil) error = %v", err)
+	}
+	nullFrame := make([]byte, 16)
+	if _, err := io.ReadFull(peer, nullFrame); err != nil {
+		t.Fatal(err)
+	}
+	wantNull := testFrame(offer.ID(), 0, []byte{7, 0, 0, 0, 0, 0, 0, 0})
+	if !bytes.Equal(nullFrame, wantNull) {
+		t.Fatalf("Accept(nil) frame = % x, want % x", nullFrame, wantNull)
+	}
+
+	empty := ""
+	if err := offer.Accept(7, &empty); err != nil {
+		t.Fatalf("Accept(empty) error = %v", err)
+	}
+	emptyFrame := make([]byte, 20)
+	if _, err := io.ReadFull(peer, emptyFrame); err != nil {
+		t.Fatal(err)
+	}
+	wantEmpty := testFrame(offer.ID(), 0, []byte{7, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0})
+	if !bytes.Equal(emptyFrame, wantEmpty) {
+		t.Fatalf("Accept(empty) frame = % x, want % x", emptyFrame, wantEmpty)
+	}
+}
