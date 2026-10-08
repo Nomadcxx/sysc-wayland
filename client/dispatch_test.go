@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"errors"
 	"net"
 	"strings"
@@ -462,6 +463,101 @@ func TestDispatchRegistersDataOfferWithoutHandler(t *testing.T) {
 	}
 }
 
+// wl_data_device.data_offer on a released device still introduces the offer.
+// Dropping the new_id leaves the compositor's follow-up events on that id
+// without a sender, which fatals the connection.
+func TestDispatchZombieParentRegistersNewIDChild(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	device := NewDataDevice(ctx)
+	called := false
+	device.SetDataOfferHandler(func(DataDeviceDataOfferEvent) { called = true })
+	if err := device.Release(); err != nil {
+		t.Fatalf("Release() error = %v", err)
+	}
+	if !device.IsZombie() {
+		t.Fatal("released data device is not a zombie")
+	}
+
+	offerID := firstServerID
+	body := make([]byte, 4)
+	PutUint32(body, offerID)
+	if _, err := peer.Write(testFrame(device.ID(), 0, body)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("data_offer on released device Dispatch() error = %v", err)
+	}
+	if called {
+		t.Fatal("zombie device ran its data_offer handler")
+	}
+	offer, ok := ctx.GetProxy(offerID).(*DataOffer)
+	if !ok || offer == nil || offer.ID() != offerID {
+		t.Fatalf("registered offer = %#v, want zombie *DataOffer %#x", ctx.GetProxy(offerID), offerID)
+	}
+	if !offer.IsZombie() {
+		t.Fatal("absorbed offer placeholder is not a zombie")
+	}
+
+	mime := "text/plain"
+	offerBody := make([]byte, 4+PaddedLen(len(mime)+1))
+	PutString(offerBody, mime)
+	if _, err := peer.Write(testFrame(offerID, 0, offerBody)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("offer on zombie placeholder Dispatch() error = %v", err)
+	}
+}
+
+// A new_id naming an object that is still live duplicates the id. The panic
+// must become a sticky fatal error, never escape Dispatch.
+func TestDispatchZombieNewIDDuplicateLiveObjectIsStickyFatal(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	ctx.RegisterWithID(&DataOffer{}, firstServerID)
+	device := NewDataDevice(ctx)
+	if err := device.Release(); err != nil {
+		t.Fatalf("Release() error = %v", err)
+	}
+
+	body := make([]byte, 4)
+	PutUint32(body, firstServerID)
+	if _, err := peer.Write(testFrame(device.ID(), 0, body)); err != nil {
+		t.Fatal(err)
+	}
+	err := ctx.Dispatch()
+	if err == nil || err != ctx.fatalErr || !strings.Contains(err.Error(), "duplicate Wayland object ID") {
+		t.Fatalf("Dispatch() error = %v, fatal = %v, want duplicate ID sticky fatal", err, ctx.fatalErr)
+	}
+}
+
+// The zombie branch closes a descriptor before absorbing, so a panic inside
+// the absorber cannot close it twice, and the absorber still sees the event.
+func TestDispatchZombieAbsorbsNewIDAndClosesFD(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	absorbedOpcode := ^uint32(0)
+	var absorbedData []byte
+	proxy := &testDispatcher{
+		hasFD: func(uint32) bool { return true },
+		absorb: func(opcode uint32, data []byte) {
+			absorbedOpcode = opcode
+			absorbedData = append([]byte(nil), data...)
+		},
+	}
+	ctx.Register(proxy)
+	proxy.MarkZombie()
+	body := make([]byte, 4)
+	PutUint32(body, firstServerID)
+	pipe := sendFDFrame(t, peer, proxy.ID(), 0, body)
+
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("Dispatch() error = %v", err)
+	}
+	assertPipeReadEndClosed(t, pipe)
+	if absorbedOpcode != 0 || !bytes.Equal(absorbedData, body) {
+		t.Fatalf("absorbed = (%d, %v), want (0, %v)", absorbedOpcode, absorbedData, body)
+	}
+}
+
 func TestGeneratedDispatchRejectsUnknownOpcode(t *testing.T) {
 	dispatchers := map[string]Dispatcher{
 		"display":       &Display{},
@@ -491,11 +587,18 @@ type testDispatcher struct {
 	BaseProxy
 	dispatch func(uint32, int, []byte)
 	hasFD    func(uint32) bool
+	absorb   func(uint32, []byte)
 }
 
 func (p *testDispatcher) Dispatch(opcode uint32, fd int, data []byte) {
 	if p.dispatch != nil {
 		p.dispatch(opcode, fd, data)
+	}
+}
+
+func (p *testDispatcher) AbsorbNewIDs(opcode uint32, data []byte) {
+	if p.absorb != nil {
+		p.absorb(opcode, data)
 	}
 }
 

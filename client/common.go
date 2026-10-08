@@ -13,6 +13,12 @@ type FDDispatcher interface {
 	HasFD(opcode uint32) bool
 }
 
+// NewIDAbsorber registers zombie proxies for objects introduced by an event
+// that arrives on a zombie. Generated dispatchers implement it.
+type NewIDAbsorber interface {
+	AbsorbNewIDs(opcode uint32, data []byte)
+}
+
 type Proxy interface {
 	Context() *Context
 	SetContext(ctx *Context)

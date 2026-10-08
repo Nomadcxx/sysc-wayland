@@ -845,15 +845,7 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 			switch arg.Type {
 			case "object", "new_id":
 				if arg.Interface != "" {
-					argIface := toCamel(arg.Interface)
-
-					if !isLocalInterface(arg.Interface) {
-						if protocol.Name != "wayland" && strings.HasPrefix(arg.Interface, "wl_") {
-							argIface = "client." + toCamelPrefix(arg.Interface, "wl_")
-						} else if protocol.Name != "xdg_shell" && strings.HasPrefix(arg.Interface, "xdg_") {
-							argIface = "xdg_shell." + toCamelPrefix(arg.Interface, "xdg_")
-						}
-					}
+					argIface := interfaceNameForArg(protocol.Name, arg.Interface)
 
 					if protocol.Name == "wayland" {
 						fmt.Fprintf(w, "%sID := Uint32(data[l :l+4])\n", argNameLower)
@@ -980,6 +972,90 @@ func writeEventDispatcher(w io.Writer, ifaceName string, v Interface) {
 	fmt.Fprintf(w, "panic(\"client: unsupported opcode\")\n")
 	fmt.Fprintf(w, "}\n")
 	fmt.Fprintf(w, "}\n")
+
+	writeNewIDAbsorber(w, ifaceName, v, decoderPrefix)
+}
+
+// writeNewIDAbsorber emits the zombie companion to Dispatch. A proxy that was
+// destroyed locally still receives in-flight events, so a new_id argument must
+// register its placeholder even though no handler runs.
+func writeNewIDAbsorber(w io.Writer, ifaceName string, v Interface, decoderPrefix string) {
+	introduces := false
+	for _, e := range v.Events {
+		for _, arg := range e.Args {
+			if arg.Type == "new_id" {
+				introduces = true
+				break
+			}
+		}
+		if introduces {
+			break
+		}
+	}
+	if !introduces {
+		return
+	}
+
+	fmt.Fprintf(w, "// AbsorbNewIDs registers zombie placeholders for objects a destroyed\n")
+	fmt.Fprintf(w, "// proxy's in-flight event introduces, so their follow-up events are\n")
+	fmt.Fprintf(w, "// discarded instead of hitting an unknown sender.\n")
+	fmt.Fprintf(w, "func (i *%s) AbsorbNewIDs(opcode uint32, data []byte) {\n", ifaceName)
+	fmt.Fprintf(w, "switch opcode {\n")
+	for i, e := range v.Events {
+		hasNewID := false
+		for _, arg := range e.Args {
+			if arg.Type == "new_id" {
+				hasNewID = true
+				break
+			}
+		}
+		if !hasNewID {
+			continue
+		}
+
+		fmt.Fprintf(w, "case %d:\n", i)
+		fmt.Fprintf(w, "l := 0\n")
+		for _, arg := range e.Args {
+			argNameLower := toLowerCamel(arg.Name)
+
+			switch arg.Type {
+			case "object", "new_id":
+				if arg.Interface != "" {
+					fmt.Fprintf(w, "%sID := %sUint32(data[l : l+4])\n", argNameLower, decoderPrefix)
+					if arg.Type == "new_id" {
+						// The placeholder absorbs the object's own follow-up
+						// events and closes any descriptors they carry.
+						argIface := interfaceNameForArg(protocol.Name, arg.Interface)
+						fmt.Fprintf(w, "if %sID != 0 {\n", argNameLower)
+						fmt.Fprintf(w, "%s := &%s{}\n", argNameLower, argIface)
+						fmt.Fprintf(w, "i.Context().RegisterWithID(%s, %sID)\n", argNameLower, argNameLower)
+						fmt.Fprintf(w, "%s.MarkZombie()\n", argNameLower)
+						fmt.Fprintf(w, "}\n")
+					}
+				}
+				fmt.Fprintf(w, "l += 4\n")
+
+			case "uint", "int", "fixed":
+				fmt.Fprintf(w, "l += 4\n")
+
+			case "fd":
+				// Ancillary data carries no bytes in the event body.
+
+			case "string", "array":
+				// Only the body length matters here, so walk variable-length
+				// arguments the same way the decoder bounds them.
+				fmt.Fprintf(w, "if len(data)-l < 4 { panic(\"client: truncated event %s length\") }\n", arg.Type)
+				fmt.Fprintf(w, "%sWireLen := %sUint32(data[l : l+4])\n", argNameLower, decoderPrefix)
+				fmt.Fprintf(w, "l += 4\n")
+				fmt.Fprintf(w, "if uint64(%sWireLen) > uint64(len(data)-l) { panic(\"client: truncated event %s\") }\n", argNameLower, arg.Type)
+				fmt.Fprintf(w, "l += %sPaddedLen(int(%sWireLen))\n", decoderPrefix, argNameLower)
+			}
+		}
+	}
+	fmt.Fprintf(w, "default:\n")
+	fmt.Fprintf(w, "panic(\"client: unsupported opcode\")\n")
+	fmt.Fprintf(w, "}\n")
+	fmt.Fprintf(w, "}\n")
 }
 
 func toCamel(s string) string {
@@ -994,6 +1070,21 @@ func toCamelPrefix(s string, prefix string) string {
 	s = strings.TrimPrefix(s, prefix)
 	s = strcase.ToCamel(s)
 	return s
+}
+
+// interfaceNameForArg maps a protocol arg's interface attribute to the Go type
+// name the generated package can reference.
+func interfaceNameForArg(protocolName, iface string) string {
+	if isLocalInterface(iface) {
+		return toCamel(iface)
+	}
+	if protocolName != "wayland" && strings.HasPrefix(iface, "wl_") {
+		return "client." + toCamelPrefix(iface, "wl_")
+	}
+	if protocolName != "xdg_shell" && strings.HasPrefix(iface, "xdg_") {
+		return "xdg_shell." + toCamelPrefix(iface, "xdg_")
+	}
+	return toCamel(iface)
 }
 
 func toLowerCamel(s string) string {
