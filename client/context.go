@@ -19,21 +19,33 @@ type Context struct {
 	conn *net.UnixConn
 	// ponytail: one goroutine owns this map; add locking only if the public ownership contract changes.
 	objects    map[uint32]Proxy
+	freeIDs    []uint32
 	currentID  uint32
 	fatalErr   error
 	pendingFDs []int
 }
 
 func (ctx *Context) Register(p Proxy) {
+	// Recycle an ID the server acknowledged with wl_display.delete_id before
+	// growing the counter: libwayland servers refuse any new_id above
+	// WL_MAP_MAX_OBJECTS, so a long-lived client must not allocate forever.
 	var id uint32
-	for {
+	for len(ctx.freeIDs) > 0 {
+		n := len(ctx.freeIDs) - 1
+		cand := ctx.freeIDs[n]
+		ctx.freeIDs = ctx.freeIDs[:n]
+		if _, live := ctx.objects[cand]; !live {
+			id = cand
+			break
+		}
+	}
+	for id == 0 {
 		if ctx.currentID >= firstServerID-1 {
 			panic("client: Wayland object ID space exhausted")
 		}
 		ctx.currentID++
-		id = ctx.currentID
-		if _, live := ctx.objects[id]; !live {
-			break
+		if _, live := ctx.objects[ctx.currentID]; !live {
+			id = ctx.currentID
 		}
 	}
 
@@ -64,7 +76,13 @@ func (ctx *Context) Unregister(p Proxy) {
 }
 
 func (ctx *Context) DeleteID(id uint32) {
+	if _, ok := ctx.objects[id]; !ok {
+		return // unknown or already deleted: never queue twice
+	}
 	delete(ctx.objects, id)
+	if id > 1 && id < firstServerID { // never recycle the display (1) or server IDs
+		ctx.freeIDs = append(ctx.freeIDs, id)
+	}
 }
 
 func (ctx *Context) GetProxy(id uint32) Proxy {
