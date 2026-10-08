@@ -293,8 +293,6 @@ func (i *ZwpTabletSeatV2) AbsorbNewIDs(opcode uint32, data []byte) {
 			id.MarkZombie()
 		}
 		l += 4
-	default:
-		panic("client: unsupported opcode")
 	}
 }
 
@@ -2364,8 +2362,6 @@ func (i *ZwpTabletPadGroupV2) AbsorbNewIDs(opcode uint32, data []byte) {
 			strip.MarkZombie()
 		}
 		l += 4
-	default:
-		panic("client: unsupported opcode")
 	}
 }
 
@@ -2822,7 +2818,5 @@ func (i *ZwpTabletPadV2) AbsorbNewIDs(opcode uint32, data []byte) {
 			padGroup.MarkZombie()
 		}
 		l += 4
-	default:
-		panic("client: unsupported opcode")
 	}
 }

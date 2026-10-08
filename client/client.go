@@ -2940,8 +2940,6 @@ func (i *DataDevice) AbsorbNewIDs(opcode uint32, data []byte) {
 			id.MarkZombie()
 		}
 		l += 4
-	default:
-		panic("client: unsupported opcode")
 	}
 }
 
