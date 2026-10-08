@@ -2926,6 +2926,25 @@ func (i *DataDevice) Dispatch(opcode uint32, fd int, data []byte) {
 	}
 }
 
+// AbsorbNewIDs registers zombie placeholders for objects a destroyed
+// proxy's in-flight event introduces, so their follow-up events are
+// discarded instead of hitting an unknown sender.
+func (i *DataDevice) AbsorbNewIDs(opcode uint32, data []byte) {
+	switch opcode {
+	case 0:
+		l := 0
+		idID := Uint32(data[l : l+4])
+		if idID != 0 {
+			id := &DataOffer{}
+			i.Context().RegisterWithID(id, idID)
+			id.MarkZombie()
+		}
+		l += 4
+	default:
+		panic("client: unsupported opcode")
+	}
+}
+
 // DataDeviceManagerInterfaceName is the name of the interface as it appears in the [client.Registry].
 // It can be used to match the [client.RegistryGlobalEvent.Interface] in the
 // [Registry.SetGlobalHandler] and can be used in [Registry.Bind] if this applies.
