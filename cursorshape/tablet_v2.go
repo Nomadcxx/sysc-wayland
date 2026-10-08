@@ -261,6 +261,41 @@ func (i *ZwpTabletSeatV2) Dispatch(opcode uint32, fd int, data []byte) {
 	}
 }
 
+// AbsorbNewIDs registers zombie placeholders for objects a destroyed
+// proxy's in-flight event introduces, so their follow-up events are
+// discarded instead of hitting an unknown sender.
+func (i *ZwpTabletSeatV2) AbsorbNewIDs(opcode uint32, data []byte) {
+	switch opcode {
+	case 0:
+		l := 0
+		idID := client.Uint32(data[l : l+4])
+		if idID != 0 {
+			id := &ZwpTabletV2{}
+			i.Context().RegisterWithID(id, idID)
+			id.MarkZombie()
+		}
+		l += 4
+	case 1:
+		l := 0
+		idID := client.Uint32(data[l : l+4])
+		if idID != 0 {
+			id := &ZwpTabletToolV2{}
+			i.Context().RegisterWithID(id, idID)
+			id.MarkZombie()
+		}
+		l += 4
+	case 2:
+		l := 0
+		idID := client.Uint32(data[l : l+4])
+		if idID != 0 {
+			id := &ZwpTabletPadV2{}
+			i.Context().RegisterWithID(id, idID)
+			id.MarkZombie()
+		}
+		l += 4
+	}
+}
+
 // ZwpTabletToolV2InterfaceName is the name of the interface as it appears in the [client.Registry].
 // It can be used to match the [client.RegistryGlobalEvent.Interface] in the
 // [Registry.SetGlobalHandler] and can be used in [Registry.Bind] if this applies.
@@ -2304,6 +2339,32 @@ func (i *ZwpTabletPadGroupV2) Dispatch(opcode uint32, fd int, data []byte) {
 	}
 }
 
+// AbsorbNewIDs registers zombie placeholders for objects a destroyed
+// proxy's in-flight event introduces, so their follow-up events are
+// discarded instead of hitting an unknown sender.
+func (i *ZwpTabletPadGroupV2) AbsorbNewIDs(opcode uint32, data []byte) {
+	switch opcode {
+	case 1:
+		l := 0
+		ringID := client.Uint32(data[l : l+4])
+		if ringID != 0 {
+			ring := &ZwpTabletPadRingV2{}
+			i.Context().RegisterWithID(ring, ringID)
+			ring.MarkZombie()
+		}
+		l += 4
+	case 2:
+		l := 0
+		stripID := client.Uint32(data[l : l+4])
+		if stripID != 0 {
+			strip := &ZwpTabletPadStripV2{}
+			i.Context().RegisterWithID(strip, stripID)
+			strip.MarkZombie()
+		}
+		l += 4
+	}
+}
+
 // ZwpTabletPadV2InterfaceName is the name of the interface as it appears in the [client.Registry].
 // It can be used to match the [client.RegistryGlobalEvent.Interface] in the
 // [Registry.SetGlobalHandler] and can be used in [Registry.Bind] if this applies.
@@ -2740,5 +2801,22 @@ func (i *ZwpTabletPadV2) Dispatch(opcode uint32, fd int, data []byte) {
 		i.removedHandler(e)
 	default:
 		panic("client: unsupported opcode")
+	}
+}
+
+// AbsorbNewIDs registers zombie placeholders for objects a destroyed
+// proxy's in-flight event introduces, so their follow-up events are
+// discarded instead of hitting an unknown sender.
+func (i *ZwpTabletPadV2) AbsorbNewIDs(opcode uint32, data []byte) {
+	switch opcode {
+	case 0:
+		l := 0
+		padGroupID := client.Uint32(data[l : l+4])
+		if padGroupID != 0 {
+			padGroup := &ZwpTabletPadGroupV2{}
+			i.Context().RegisterWithID(padGroup, padGroupID)
+			padGroup.MarkZombie()
+		}
+		l += 4
 	}
 }

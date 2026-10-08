@@ -155,13 +155,30 @@ func (ctx *Context) Dispatch() (dispatchErr error) {
 		ctx.putBackFD(fd)
 		fd = -1
 	}
+
+	// Panics from generated decoders and from zombie new_id absorption are both
+	// protocol violations of the sender: stick fatal instead of unwinding the caller.
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			closeReceivedFD(fd)
+			dispatchErr = ctx.setFatal(fmt.Errorf("dispatch: panic handling opcode=%d senderID=%d: %v", opcode, senderID, recovered))
+		}
+	}()
 	if proxy.IsZombie() {
 		// wl_display has no destructor request, so Display.Destroy only zombies it locally: the
 		// object is still the one that receives delete_id and error. Dropping those would leak
 		// object IDs and hide a protocol error, so the display keeps handling its own events.
-		// Every other zombie still absorbs in-flight events.
+		// Every other zombie absorbs in-flight events. A new_id introduction becomes a zombie
+		// placeholder so the compositor's follow-up events find a sender instead of fataling.
 		if _, isDisplay := proxy.(*Display); !isDisplay {
 			closeReceivedFD(fd)
+			fd = -1
+			if absorber, ok := proxy.(NewIDAbsorber); ok {
+				absorber.AbsorbNewIDs(opcode, data)
+			}
+			if ctx.fatalErr != nil {
+				return ctx.fatalErr
+			}
 			return nil
 		}
 	}
@@ -170,13 +187,6 @@ func (ctx *Context) Dispatch() (dispatchErr error) {
 		closeReceivedFD(fd)
 		return ctx.setFatal(fmt.Errorf("%w (senderID=%d)", ErrDispatchSenderUnsupported, senderID))
 	}
-
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			closeReceivedFD(fd)
-			dispatchErr = ctx.setFatal(fmt.Errorf("dispatch: panic handling opcode=%d senderID=%d: %v", opcode, senderID, recovered))
-		}
-	}()
 	sender.Dispatch(opcode, fd, data)
 	// The dispatcher owns fd after a normal return, including when its
 	// handler sticks fatalErr. Panic recovery above still closes fd.

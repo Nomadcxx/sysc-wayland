@@ -523,6 +523,50 @@ func TestScannerRegistersNewIDBeforeNilHandler(t *testing.T) {
 	}
 }
 
+// A zombie absorbs new_id introductions. Only interfaces that can introduce
+// objects get AbsorbNewIDs, and the argument walk must reach a new_id that
+// follows fixed or variable-length arguments.
+func TestScannerEmitsZombieNewIDAbsorption(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "absorb.xml")
+	out := filepath.Join(dir, "absorb.go")
+	writeFixture(t, input, absorbProtocol)
+
+	runScanner(t, "-pkg", "fixture", "-i", input, "-o", out)
+	data := readFile(t, out)
+
+	absorb, ok := funcBody(string(data), "func (i *FixtureSeat) AbsorbNewIDs(opcode uint32, data []byte)")
+	if !ok {
+		t.Fatal("interface with a new_id event has no AbsorbNewIDs")
+	}
+	if strings.Contains(absorb, "unsupported opcode") || strings.Contains(absorb, "default:") {
+		t.Fatalf("AbsorbNewIDs must ignore events that introduce no object:\n%s", absorb)
+	}
+	indexed, ok := eventBody(absorb, "case 0:")
+	if !ok {
+		t.Fatal("AbsorbNewIDs has no case 0 branch")
+	}
+	if !strings.Contains(indexed, "RegisterWithID") || !strings.Contains(indexed, "MarkZombie") {
+		t.Fatalf("new_id case does not register a zombie:\n%s", indexed)
+	}
+	if strings.Index(indexed, "l += 4") > strings.Index(indexed, "idID := ") {
+		t.Fatalf("leading int arg does not advance before the new_id:\n%s", indexed)
+	}
+	named, ok := eventBody(absorb, "case 1:")
+	if !ok {
+		t.Fatal("AbsorbNewIDs has no case 1 branch")
+	}
+	if at := strings.Index(named, "PaddedLen"); at < 0 || at > strings.Index(named, "idID := ") {
+		t.Fatalf("string arg does not advance to the new_id by its padded length:\n%s", named)
+	}
+	if strings.Contains(string(data), "FixtureOther) AbsorbNewIDs") {
+		t.Fatal("AbsorbNewIDs emitted for an interface with no new_id event")
+	}
+	if _, err := parser.ParseFile(token.NewFileSet(), out, data, parser.AllErrors); err != nil {
+		t.Fatalf("parse generated output: %v", err)
+	}
+}
+
 // eventBody returns the generated source between one opcode branch and the
 // next, so a test can assert on one event without matching the whole file.
 func eventBody(source, branch string) (string, bool) {
@@ -566,6 +610,28 @@ const objectArgProtocol = `<?xml version="1.0" encoding="UTF-8"?>
     </event>
     <event name="left">
       <arg name="surface" type="object" interface="fixture_surface"/>
+    </event>
+  </interface>
+</protocol>
+`
+
+const absorbProtocol = `<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fixture">
+  <copyright>Fixture copyright.</copyright>
+  <interface name="fixture_offer" version="1">
+    <request name="destroy" type="destructor"/>
+  </interface>
+  <interface name="fixture_other" version="1">
+    <event name="plain"/>
+  </interface>
+  <interface name="fixture_seat" version="1">
+    <event name="indexed">
+      <arg name="index" type="int"/>
+      <arg name="id" type="new_id" interface="fixture_offer"/>
+    </event>
+    <event name="named">
+      <arg name="name" type="string"/>
+      <arg name="id" type="new_id" interface="fixture_offer"/>
     </event>
   </interface>
 </protocol>
