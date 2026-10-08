@@ -1052,8 +1052,6 @@ func writeNewIDAbsorber(w io.Writer, ifaceName string, v Interface, decoderPrefi
 			}
 		}
 	}
-	fmt.Fprintf(w, "default:\n")
-	fmt.Fprintf(w, "panic(\"client: unsupported opcode\")\n")
 	fmt.Fprintf(w, "}\n")
 	fmt.Fprintf(w, "}\n")
 }

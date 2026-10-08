@@ -539,6 +539,9 @@ func TestScannerEmitsZombieNewIDAbsorption(t *testing.T) {
 	if !ok {
 		t.Fatal("interface with a new_id event has no AbsorbNewIDs")
 	}
+	if strings.Contains(absorb, "unsupported opcode") || strings.Contains(absorb, "default:") {
+		t.Fatalf("AbsorbNewIDs must ignore events that introduce no object:\n%s", absorb)
+	}
 	indexed, ok := eventBody(absorb, "case 0:")
 	if !ok {
 		t.Fatal("AbsorbNewIDs has no case 0 branch")

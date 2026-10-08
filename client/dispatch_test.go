@@ -558,6 +558,43 @@ func TestDispatchZombieAbsorbsNewIDAndClosesFD(t *testing.T) {
 	}
 }
 
+// Zombie events without a new_id stay discarded: making them fatal would kill
+// connections for ordinary in-flight events like wl_data_device.leave.
+func TestDispatchZombieDiscardsEventWithoutNewID(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	device := NewDataDevice(ctx)
+	if err := device.Release(); err != nil {
+		t.Fatalf("Release() error = %v", err)
+	}
+	body := make([]byte, 4)                                                // object arg, null surface
+	if _, err := peer.Write(testFrame(device.ID(), 2, body)); err != nil { // wl_data_device.leave
+		t.Fatal(err)
+	}
+	if err := ctx.Dispatch(); err != nil {
+		t.Fatalf("leave on released device Dispatch() error = %v", err)
+	}
+	if ctx.fatalErr != nil {
+		t.Fatalf("fatal = %v, want nil", ctx.fatalErr)
+	}
+}
+
+// A truncated new_id on a zombie is a protocol violation of the sender:
+// sticky fatal, never an escaping panic.
+func TestDispatchZombieTruncatedNewIDIsStickyFatal(t *testing.T) {
+	ctx, peer := socketPairContext(t)
+	device := NewDataDevice(ctx)
+	if err := device.Release(); err != nil {
+		t.Fatalf("Release() error = %v", err)
+	}
+	if _, err := peer.Write(testFrame(device.ID(), 0, []byte{1, 2})); err != nil {
+		t.Fatal(err)
+	}
+	err := ctx.Dispatch()
+	if err == nil || err != ctx.fatalErr {
+		t.Fatalf("Dispatch() error = %v, fatal = %v, want sticky fatal", err, ctx.fatalErr)
+	}
+}
+
 func TestGeneratedDispatchRejectsUnknownOpcode(t *testing.T) {
 	dispatchers := map[string]Dispatcher{
 		"display":       &Display{},
