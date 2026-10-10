@@ -1,10 +1,16 @@
-![sysc-wayland](assets/wordmark.png)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark.png">
+    <img src="assets/wordmark-light.png" alt="sysc-wayland" height="64">
+  </picture>
+</p>
 
 Pure-Go Wayland transport and typed protocol bindings. Core bindings, extension protocols
 and a protocol scanner, without CGO or libwayland.
 
 ## Quick Links
 
+- [Documentation site](https://nomadcxx.github.io/sysc/docs/components/sysc-wayland/)
 - [Documentation](#documentation)
 - [The sysc ecosystem](https://github.com/Nomadcxx/sysc-shell/blob/main/docs/ecosystem.md)
 
