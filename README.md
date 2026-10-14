@@ -19,12 +19,10 @@ and a protocol scanner, without CGO or libwayland.
 Run inside an existing Go module with Go 1.26 or later:
 
 ```bash
-go get github.com/Nomadcxx/sysc-wayland@v0.3.1
+go get github.com/Nomadcxx/sysc-wayland@v0.3.2
 ```
 
-For the `sessionlock` prerelease, use `go get github.com/Nomadcxx/sysc-wayland@v0.3.2-rc.1`.
-
-Stable packages: `client`, `textinput`, `cursorshape`, `idle`. The prerelease adds `sessionlock`.
+Stable packages: `client`, `textinput`, `cursorshape`, `idle`, `sessionlock`.
 
 ## Protocols and transport
 
@@ -36,7 +34,7 @@ Extracted from [dankgo](https://github.com/AvengeMedia/dankgo) at commit `104346
 - **Wire framing** with ancillary file-descriptor handling across fragmented reads and partial writes
 - **Proxy lifecycle** with ID reuse: a server ID replaces a zombie proxy, and a live duplicate panics
 - **Generated bindings** for the Wayland core plus `textinput`, `cursorshape` (with tablet-v2),
-  `idle`
+  `idle` and `sessionlock`
 - **Opcode metadata**: generated types identify events that carry file descriptors
 - **Connects** by adopting a `WAYLAND_SOCKET` file descriptor, or using `WAYLAND_DISPLAY`
   (default `wayland-0`), with relative socket names resolved under `XDG_RUNTIME_DIR`
@@ -51,9 +49,7 @@ Extracted from [dankgo](https://github.com/AvengeMedia/dankgo) at commit `104346
 | v0.2.2 | Coalesced FD ordering and opcode metadata |
 | v0.3.0 | `idle` (ext-idle-notify-v1) |
 | v0.3.1 | ID reuse fix |
-
-The `sessionlock` package (ext-session-lock-v1) is available on `feat/sessionlock`, tagged
-`v0.3.2-rc.1`; it has no stable release yet.
+| v0.3.2 | Session-lock bindings, transport validation and proxy lifecycle fixes |
 
 ## Generating bindings
 
@@ -64,7 +60,7 @@ go run ./cmd/sysc-wayland-scanner -i protocols/wayland.xml -o /tmp/sysc-wayland-
 ```
 
 Flags: `-i` input XML, `-o` output Go file, `-pkg` package name, `-prefix`, `-suffix`, and
-`-xdg-shell-import` for protocols that reference external `xdg_*` types. The repo ships five XMLs in
+`-xdg-shell-import` for protocols that reference external `xdg_*` types. The repo ships six XMLs in
 `protocols/`. Fetch xdg-shell, fractional-scale and viewporter from wayland-protocols;
 wlr-layer-shell comes from wlr-protocols. In-repo invocations are `//go:generate` lines next to each package.
 
