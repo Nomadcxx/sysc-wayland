@@ -57,7 +57,7 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 		return 0, 0, -1, nil, ctx.setFatal(err)
 	}
 
-	header := make([]byte, 8)
+	header := ctx.header[:]
 	if n, err := ctx.readExact(header); err != nil {
 		if n == 0 && isDeadline(err) {
 			return 0, 0, -1, nil, fmt.Errorf("%w: %w", ErrReadTimeout, err)
@@ -93,7 +93,18 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 }
 
 func (ctx *Context) readExact(dst []byte) (int, error) {
-	return readExactWith(ctx.conn.ReadMsgUnix, dst, &ctx.pendingFDs)
+	return readExactWith(ctx.conn.ReadMsgUnix, dst, &ctx.pendingFDs, ctx.oobBuffer())
+}
+
+// oobBuffer returns the control-message buffer this context reuses for every
+// read. One goroutine owns a context and its socket, so the buffer needs no
+// lock and never has to grow: it is allocated once and then reused, which is
+// what keeps a read from allocating a kilobyte of garbage per event.
+func (ctx *Context) oobBuffer() []byte {
+	if ctx.oob == nil {
+		ctx.oob = make([]byte, oobSpace)
+	}
+	return ctx.oob
 }
 
 func (ctx *Context) takeFD() int {
@@ -114,9 +125,17 @@ type readMsgUnixFunc func([]byte, []byte) (int, int, int, *net.UnixAddr, error)
 // readExactWith reads len(dst) bytes. On error it also returns how many bytes of dst were
 // consumed before the error, so callers can tell a frame-boundary failure (0 bytes) from a
 // partial read that desynchronized the stream.
-func readExactWith(read readMsgUnixFunc, dst []byte, fds *[]int) (int, error) {
+//
+// oob is the control-message buffer the read fills. A caller that reads on
+// one goroutine can hand in a buffer it reuses; a nil buffer is allocated for
+// this call alone.
+func readExactWith(read readMsgUnixFunc, dst []byte, fds *[]int, oob []byte) (int, error) {
 	consumed := 0
-	oob := make([]byte, oobSpace)
+	if cap(oob) < oobSpace {
+		oob = make([]byte, oobSpace)
+	} else {
+		oob = oob[:oobSpace]
+	}
 	for len(dst) > 0 {
 		n, oobn, flags, _, readErr := read(dst, oob)
 		if oobn > 0 {

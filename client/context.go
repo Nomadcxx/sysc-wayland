@@ -23,6 +23,14 @@ type Context struct {
 	currentID  uint32
 	fatalErr   error
 	pendingFDs []int
+	// header holds the frame header of the event being read. It belongs to
+	// the context so that reading an event does not allocate one: one
+	// goroutine owns the context, so one buffer serves every read.
+	header [8]byte
+	// oob holds the control-message buffer of every read on this
+	// connection. It is allocated once and reused, for the same reason the
+	// header is.
+	oob []byte
 }
 
 func (ctx *Context) Register(p Proxy) {
