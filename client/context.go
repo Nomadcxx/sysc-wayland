@@ -23,6 +23,11 @@ type Context struct {
 	currentID  uint32
 	fatalErr   error
 	pendingFDs []int
+	// header and oob are the scratch buffers of the event loop. One goroutine
+	// owns a connection, so they are reused for every event instead of being
+	// allocated per read.
+	header [8]byte
+	oob    []byte
 }
 
 func (ctx *Context) Register(p Proxy) {
