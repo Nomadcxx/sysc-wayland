@@ -57,7 +57,7 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 		return 0, 0, -1, nil, ctx.setFatal(err)
 	}
 
-	header := make([]byte, 8)
+	header := ctx.header[:]
 	if n, err := ctx.readExact(header); err != nil {
 		if n == 0 && isDeadline(err) {
 			return 0, 0, -1, nil, fmt.Errorf("%w: %w", ErrReadTimeout, err)
@@ -79,6 +79,10 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 		return fail(fmt.Errorf("ctx.ReadMsg: unaligned frame size %d", size))
 	}
 
+	// ponytail: the header and the body are still two recvmsg calls. One call
+	// would need a buffer for the whole frame and a copy of the body out of
+	// it, which trades one allocation for a syscall; the allocation was the
+	// larger cost, so the second call stays.
 	msgSize := int(size - 8)
 	msg = make([]byte, msgSize)
 	if msgSize > 0 {
@@ -92,8 +96,19 @@ func (ctx *Context) ReadMsg() (senderID uint32, opcode uint32, fd int, msg []byt
 	return senderID, opcode, fd, msg, nil
 }
 
+// readExact reads into dst and reports how many bytes it consumed.
 func (ctx *Context) readExact(dst []byte) (int, error) {
-	return readExactWith(ctx.conn.ReadMsgUnix, dst, &ctx.pendingFDs)
+	return readExactWith(ctx.conn, dst, &ctx.pendingFDs, ctx.oobBuffer())
+}
+
+// oobBuffer returns the control-message buffer of the context. The buffer is
+// allocated once and reused for every read: one goroutine owns a connection,
+// so no two reads can be in flight at the same time.
+func (ctx *Context) oobBuffer() []byte {
+	if ctx.oob == nil {
+		ctx.oob = make([]byte, oobSpace)
+	}
+	return ctx.oob
 }
 
 func (ctx *Context) takeFD() int {
@@ -109,16 +124,24 @@ func (ctx *Context) takeFD() int {
 	return fd
 }
 
-type readMsgUnixFunc func([]byte, []byte) (int, int, int, *net.UnixAddr, error)
+// msgReader is the part of a unix connection the event loop reads from. The
+// loop takes an interface instead of a method value: a method value would
+// allocate a closure on every read, which is one allocation per event.
+type msgReader interface {
+	ReadMsgUnix(b, oob []byte) (n, oobn, flags int, addr *net.UnixAddr, err error)
+}
 
 // readExactWith reads len(dst) bytes. On error it also returns how many bytes of dst were
 // consumed before the error, so callers can tell a frame-boundary failure (0 bytes) from a
 // partial read that desynchronized the stream.
-func readExactWith(read readMsgUnixFunc, dst []byte, fds *[]int) (int, error) {
+//
+// oob is the caller's control-message buffer. Passing it in keeps the read
+// free of allocations: the buffer belongs to the connection, which one
+// goroutine owns.
+func readExactWith(read msgReader, dst []byte, fds *[]int, oob []byte) (int, error) {
 	consumed := 0
-	oob := make([]byte, oobSpace)
 	for len(dst) > 0 {
-		n, oobn, flags, _, readErr := read(dst, oob)
+		n, oobn, flags, _, readErr := read.ReadMsgUnix(dst, oob)
 		if oobn > 0 {
 			received, err := getFdsFromOob(oob, oobn, "frame")
 			if err != nil {

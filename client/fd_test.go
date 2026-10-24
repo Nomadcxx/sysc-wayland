@@ -164,13 +164,17 @@ func TestReadFrameDispatchesCoalescedFileDescriptorsInOrder(t *testing.T) {
 	}
 }
 
+// truncatingReader reports a control-message truncation on every read.
+type truncatingReader struct{}
+
+func (truncatingReader) ReadMsgUnix(data, oob []byte) (int, int, int, *net.UnixAddr, error) {
+	return len(data), 0, unix.MSG_CTRUNC, nil, nil
+}
+
 func TestReadFrameRejectsControlTruncation(t *testing.T) {
-	read := func(data, oob []byte) (int, int, int, *net.UnixAddr, error) {
-		return len(data), 0, unix.MSG_CTRUNC, nil, nil
-	}
 	var fds []int
 
-	_, err := readExactWith(read, make([]byte, 8), &fds)
+	_, err := readExactWith(truncatingReader{}, make([]byte, 8), &fds, make([]byte, oobSpace))
 	if err == nil || !strings.Contains(err.Error(), "truncated") {
 		t.Fatalf("readExactWith() error = %v, want truncation error", err)
 	}

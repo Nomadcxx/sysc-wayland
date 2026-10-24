@@ -131,7 +131,7 @@ func TestReadFrameRejectsSenderZero(t *testing.T) {
 	}
 }
 
-func socketPairContext(t *testing.T) (*Context, *net.UnixConn) {
+func socketPairContext(t testing.TB) (*Context, *net.UnixConn) {
 	t.Helper()
 	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
