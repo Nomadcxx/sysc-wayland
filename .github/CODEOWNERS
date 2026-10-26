@@ -1,0 +1,24 @@
+# The review path per area.
+#
+# There is one owner, so every path below names the same reviewer. The value of this file is the map:
+# which paths belong to which repository, and which of them are cross-repository contracts. A change to
+# a contract needs the repositories that consume it, not only the one that holds it.
+
+# The default owner for everything in this repository.
+/* @Nomadcxx
+
+# The protocol surface this repository owns. The shell, the terminal and the lock all
+# consume it, so a change here is a change to all three of them.
+/client/ @Nomadcxx
+/protocols/ @Nomadcxx
+
+# The extensions the shell and the lock use. Each of them is a contract with the
+# compositor as much as with the shell.
+/sessionlock/ @Nomadcxx
+/textinput/ @Nomadcxx
+/cursorshape/ @Nomadcxx
+/idle/ @Nomadcxx
+
+# The client library and the command line tools.
+/internal/ @Nomadcxx
+/cmd/ @Nomadcxx
