@@ -1,6 +1,9 @@
 module github.com/Nomadcxx/sysc-wayland
 
-go 1.26
+// The module calls x509.Certificate.Verify, so it needs a standard library
+// without GO-2026-6809 (fixed in go1.26.10). CI reads this directive for the
+// toolchain it installs, so the floor here is the floor everywhere.
+go 1.26.10
 
 require (
 	github.com/iancoleman/strcase v0.3.0
