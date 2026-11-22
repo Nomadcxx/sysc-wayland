@@ -3,19 +3,15 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/hex"
 	"encoding/xml"
-	"errors"
 	"flag"
 	"fmt"
 	"go/doc"
-	"golang.org/x/crypto/blake2b"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/iancoleman/strcase"
@@ -33,7 +29,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&inputFile, "i", "", "Remote url or local path of the protocol xml file")
+	flag.StringVar(&inputFile, "i", "", "Local path of the protocol xml file")
 	flag.StringVar(&outputFile, "o", "", "Path of the generated output go file")
 	flag.StringVar(&packageName, "pkg", "", "Go package name")
 	flag.StringVar(&prefix, "prefix", "", "Specify prefix to trim")
@@ -111,7 +107,6 @@ type Description struct {
 	Summary string   `xml:"summary,attr"`
 }
 
-var cacheDir string
 var protocol Protocol
 
 func main() {
@@ -122,20 +117,14 @@ func main() {
 		return
 	}
 
-	useCache := os.Getenv("WAYLAND_SCANNER_USE_CACHE")
-	if useCache == "1" {
-		xdgCacheHome := os.Getenv("XDG_CACHE_HOME")
-		if xdgCacheHome == "" {
-			xdgCacheHome = filepath.Join(os.Getenv("HOME"), ".cache")
-		}
-		cacheDir = filepath.Join(xdgCacheHome, "go-wayland/scanner")
-		err := os.MkdirAll(cacheDir, 0755)
-		if err != nil {
-			log.Fatalf("failed to create cache directory with enabled cache: %v", err)
-		}
+	// A URL input was fetched with no digest, over plain HTTP if given, and
+	// optionally cached under a predictable name that later runs trusted.
+	// The XML becomes Go source, so it is read only from a file the developer
+	// has checked in or verified.
+	if strings.Contains(inputFile, "://") {
+		log.Fatalf("-i must be a local file; download the protocol and check its digest first")
 	}
-
-	src, err := getInputFile(inputFile)
+	src, err := os.Open(inputFile)
 	if err != nil {
 		log.Fatalf("unable to get input file: %v", err)
 	}
@@ -145,6 +134,9 @@ func main() {
 	}
 	if err2 := src.Close(); err2 != nil {
 		log.Printf("unable to close input file: %v", err2)
+	}
+	if err := validateProtocol(protocol); err != nil {
+		log.Fatalf("invalid protocol xml: %v", err)
 	}
 	needsXDGImport := requiresXDGImport()
 	if needsXDGImport && xdgShellImport == "" {
@@ -190,52 +182,74 @@ func main() {
 	}
 }
 
-func getInputFile(file string) (io.ReadCloser, error) {
-	if strings.HasPrefix(file, "http") {
-		var pathToFile string
-		if cacheDir != "" {
-			hashBytes := blake2b.Sum512([]byte(file))
-			hash := hex.EncodeToString(hashBytes[:])
+// The scanner writes XML names, types and enum values into Go source as
+// identifiers, literals and constants. Each must have the shape the Wayland
+// protocol format gives it, so a crafted protocol cannot add code of its own.
+var (
+	protocolNamePattern  = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+	protocolEnumPattern  = regexp.MustCompile(`^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)?$`)
+	protocolValuePattern = regexp.MustCompile(`^(0x[0-9A-Fa-f]+|[0-9]+)$`)
+	protocolArgTypes     = map[string]bool{
+		"int": true, "uint": true, "fixed": true, "string": true,
+		"object": true, "new_id": true, "array": true, "fd": true,
+	}
+)
 
-			pathToFile = filepath.Join(
-				cacheDir,
-				// Hash limit chosen kinda arbitrarily, 16^15 possible combinations
-				fmt.Sprintf("%s-%s", packageName, hash[:15]),
-			)
-			handle, err := os.Open(pathToFile)
-			switch {
-			case errors.Is(err, os.ErrNotExist):
-				// Not cached yet
-			case err != nil:
-				return nil, fmt.Errorf("unable to open cached file: %v", err)
-			default:
-				return handle, nil
+func validateProtocol(p Protocol) error {
+	if !protocolNamePattern.MatchString(p.Name) {
+		return fmt.Errorf("protocol name %q", p.Name)
+	}
+	for _, iface := range p.Interfaces {
+		if !protocolNamePattern.MatchString(iface.Name) {
+			return fmt.Errorf("interface name %q", iface.Name)
+		}
+		for _, r := range iface.Requests {
+			if err := validateMessage(iface.Name, r.Name, r.Type, r.Args); err != nil {
+				return err
 			}
 		}
-
-		resp, err := http.Get(file)
-		if err != nil {
-			return nil, err
+		for _, e := range iface.Events {
+			if err := validateMessage(iface.Name, e.Name, e.Type, e.Args); err != nil {
+				return err
+			}
 		}
-
-		if cacheDir == "" {
-			return resp.Body, nil
+		for _, e := range iface.Enums {
+			if !protocolNamePattern.MatchString(e.Name) {
+				return fmt.Errorf("%s: enum name %q", iface.Name, e.Name)
+			}
+			for _, entry := range e.Entries {
+				if !protocolNamePattern.MatchString(entry.Name) {
+					return fmt.Errorf("%s.%s: entry name %q", iface.Name, e.Name, entry.Name)
+				}
+				if !protocolValuePattern.MatchString(entry.Value) {
+					return fmt.Errorf("%s.%s.%s: entry value %q", iface.Name, e.Name, entry.Name, entry.Value)
+				}
+			}
 		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read response body: %v", err)
-		}
-
-		err = os.WriteFile(pathToFile, body, 0644)
-		if err != nil {
-			return nil, fmt.Errorf("unable to save file to cache: %v", err)
-		}
-
-		return io.NopCloser(bytes.NewReader(body)), nil
 	}
+	return nil
+}
 
-	return os.Open(file)
+func validateMessage(iface, name, kind string, args []Arg) error {
+	if !protocolNamePattern.MatchString(name) {
+		return fmt.Errorf("%s: message name %q", iface, name)
+	}
+	if kind != "" && kind != "destructor" {
+		return fmt.Errorf("%s.%s: message type %q", iface, name, kind)
+	}
+	for _, arg := range args {
+		switch {
+		case !protocolNamePattern.MatchString(arg.Name):
+			return fmt.Errorf("%s.%s: argument name %q", iface, name, arg.Name)
+		case !protocolArgTypes[arg.Type]:
+			return fmt.Errorf("%s.%s.%s: argument type %q", iface, name, arg.Name, arg.Type)
+		case arg.Interface != "" && !protocolNamePattern.MatchString(arg.Interface):
+			return fmt.Errorf("%s.%s.%s: argument interface %q", iface, name, arg.Name, arg.Interface)
+		case arg.Enum != "" && !protocolEnumPattern.MatchString(arg.Enum):
+			return fmt.Errorf("%s.%s.%s: argument enum %q", iface, name, arg.Name, arg.Enum)
+		}
+	}
+	return nil
 }
 
 func fmtFile(b []byte) []byte {
@@ -282,7 +296,7 @@ func writeInterface(w io.Writer, v Interface) {
 `, ifaceName)
 	fmt.Fprintf(w, "// It can be used to match the [client.RegistryGlobalEvent.Interface] in the\n")
 	fmt.Fprintf(w, "// [Registry.SetGlobalHandler] and can be used in [Registry.Bind] if this applies.\n")
-	fmt.Fprintf(w, "const %sInterfaceName = \"%s\"\n", ifaceName, v.Name)
+	fmt.Fprintf(w, "const %sInterfaceName = %q\n", ifaceName, v.Name)
 
 	// Interface struct
 	fmt.Fprintf(w, "// %s : %s\n", ifaceName, new(doc.Package).Synopsis(v.Description.Summary))
@@ -705,7 +719,7 @@ func writeEnum(w io.Writer, ifaceName string, e Enum) {
 		entryName := toCamel(entry.Name)
 
 		fmt.Fprintf(w, "case %s%s%s:\n", ifaceName, enumName, entryName)
-		fmt.Fprintf(w, "return \"%s\"\n", entry.Value)
+		fmt.Fprintf(w, "return %q\n", entry.Value)
 	}
 	fmt.Fprintf(w, "default:\n")
 	fmt.Fprintf(w, "return \"\"\n")
