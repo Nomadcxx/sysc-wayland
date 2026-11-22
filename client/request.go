@@ -99,7 +99,14 @@ func PutString(dst []byte, v string) {
 	dst[4+len(v)] = '\x00' // To cause panic if dst is not large enough
 }
 
+// PutArray places an array in Wayland's wire format on the destination
+// buffer: its length, then its bytes. The length of dst must be equal to, or
+// greater than, len(a) + 4. A shorter dst panics, as PutString does, rather
+// than write a length the frame cannot back.
 func PutArray(dst []byte, a []byte) {
+	if len(dst) < 4+len(a) {
+		panic("client: PutArray destination is shorter than the array")
+	}
 	PutUint32(dst[:4], uint32(len(a)))
 	copy(dst[4:], a)
 }

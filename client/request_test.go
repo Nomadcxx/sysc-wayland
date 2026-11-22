@@ -216,3 +216,23 @@ func TestDataOfferAcceptEncodesNullMimeType(t *testing.T) {
 		t.Fatalf("Accept(empty) frame = % x, want % x", emptyFrame, wantEmpty)
 	}
 }
+
+// TestPutArrayRefusesAShortDestination is the guard for the length field:
+// a short buffer used to get a length larger than the bytes behind it, a
+// malformed frame the compositor answers by disconnecting.
+func TestPutArrayRefusesAShortDestination(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("PutArray wrote into a destination shorter than its array")
+		}
+	}()
+	PutArray(make([]byte, 6), make([]byte, 10))
+}
+
+func TestPutArrayWritesLengthAndBytes(t *testing.T) {
+	dst := make([]byte, 4+3)
+	PutArray(dst, []byte{7, 8, 9})
+	if got := Uint32(dst[:4]); got != 3 || dst[4] != 7 || dst[6] != 9 {
+		t.Fatalf("PutArray wrote %v", dst)
+	}
+}
