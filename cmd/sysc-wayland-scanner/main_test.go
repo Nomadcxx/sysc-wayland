@@ -280,7 +280,7 @@ func TestScannerMarksDestroyedRegistryZombie(t *testing.T) {
 
 	runScanner(t, "-pkg", "client", "-prefix", "wl_", "-i", input, "-o", output)
 	generated := readFile(t, output)
-	want := []byte("func (i *Fixes) DestroyRegistry(registry *Registry) error {\n\tdefer registry.MarkZombie()")
+	want := []byte("func (i *Fixes) DestroyRegistry(registry *Registry) error {\n\tif i.IsZombie() || (registry != nil && registry.IsZombie()) {\n\t\treturn ErrProxyDestroyed\n\t}\n\tdefer registry.MarkZombie()")
 	if !bytes.Contains(generated, want) {
 		t.Fatalf("generated DestroyRegistry does not mark its target zombie:\n%s", generated)
 	}

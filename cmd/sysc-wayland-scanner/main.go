@@ -396,6 +396,28 @@ func writeRequest(w io.Writer, ifaceName string, iface Interface, opcode int, r 
 		}
 	}
 	fmt.Fprintf(w, "func (i *%s) %s(%s) (%s) {\n", ifaceName, requestName, strings.Join(params, ","), strings.Join(returnTypes, ","))
+	// A destroyed proxy's ID may already name another object, so a request
+	// from it, a repeated destructor included, or naming it as an argument
+	// never reaches the wire.
+	destroyedReturns := make([]string, len(returnTypes)-1, len(returnTypes))
+	for n := range destroyedReturns {
+		destroyedReturns[n] = "nil"
+	}
+	if protocol.Name == "wayland" {
+		destroyedReturns = append(destroyedReturns, "ErrProxyDestroyed")
+	} else {
+		destroyedReturns = append(destroyedReturns, "client.ErrProxyDestroyed")
+	}
+	destroyedCheck := []string{"i.IsZombie()"}
+	for _, arg := range r.Args {
+		if arg.Type == "object" {
+			argNameLower := toLowerCamel(arg.Name)
+			destroyedCheck = append(destroyedCheck, fmt.Sprintf("(%s != nil && %s.IsZombie())", argNameLower, argNameLower))
+		}
+	}
+	fmt.Fprintf(w, "if %s {\n", strings.Join(destroyedCheck, " || "))
+	fmt.Fprintf(w, "return %s\n", strings.Join(destroyedReturns, ","))
+	fmt.Fprintf(w, "}\n")
 	if r.Type == "destructor" {
 		fmt.Fprintf(w, "defer i.MarkZombie()\n")
 	}

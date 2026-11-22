@@ -116,6 +116,9 @@ func NewZwpTextInputV3(ctx *client.Context) *ZwpTextInputV3 {
 // Destroy the wp_text_input object. Also disables all surfaces enabled
 // through this wp_text_input object.
 func (i *ZwpTextInputV3) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -160,6 +163,9 @@ func (i *ZwpTextInputV3) Destroy() error {
 // The changes must be applied by the compositor after issuing a
 // zwp_text_input_v3.commit request.
 func (i *ZwpTextInputV3) Enable() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -180,6 +186,9 @@ func (i *ZwpTextInputV3) Enable() error {
 // State set with this request is double-buffered. It will get applied on
 // the next zwp_text_input_v3.commit request.
 func (i *ZwpTextInputV3) Disable() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 2
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -226,6 +235,9 @@ func (i *ZwpTextInputV3) Disable() error {
 // input does not support sending surrounding text. If the empty values
 // get applied, subsequent attempts to change them may have no effect.
 func (i *ZwpTextInputV3) SetSurroundingText(text string, cursor, anchor int32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 3
 	textLen := client.PaddedLen(len(text) + 1)
 	_reqBufLen := 8 + (4 + textLen) + 4 + 4
@@ -262,6 +274,9 @@ func (i *ZwpTextInputV3) SetSurroundingText(text string, cursor, anchor int32) e
 //
 // The initial value of cause is input_method.
 func (i *ZwpTextInputV3) SetTextChangeCause(cause uint32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 4
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -290,6 +305,9 @@ func (i *ZwpTextInputV3) SetTextChangeCause(cause uint32) error {
 // The initial value for hint is none, and the initial value for purpose
 // is normal.
 func (i *ZwpTextInputV3) SetContentType(hint, purpose uint32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 5
 	const _reqBufLen = 8 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -326,6 +344,9 @@ func (i *ZwpTextInputV3) SetContentType(hint, purpose uint32) error {
 // empty values get applied, subsequent attempts to change them may have
 // no effect.
 func (i *ZwpTextInputV3) SetCursorRectangle(x, y, width, height int32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 6
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -372,6 +393,9 @@ func (i *ZwpTextInputV3) SetCursorRectangle(x, y, width, height int32) error {
 // each zwp_text_input_v3 object and use the count as the serial in done
 // events.
 func (i *ZwpTextInputV3) Commit() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 7
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -938,6 +962,9 @@ func NewZwpTextInputManagerV3(ctx *client.Context) *ZwpTextInputManagerV3 {
 //
 // Destroy the wp_text_input_manager object.
 func (i *ZwpTextInputManagerV3) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -955,6 +982,9 @@ func (i *ZwpTextInputManagerV3) Destroy() error {
 //
 // Creates a new text-input object for a given seat.
 func (i *ZwpTextInputManagerV3) GetTextInput(seat *client.Seat) (*ZwpTextInputV3, error) {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) {
+		return nil, client.ErrProxyDestroyed
+	}
 	id := NewZwpTextInputV3(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4

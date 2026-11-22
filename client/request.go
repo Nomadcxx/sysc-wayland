@@ -16,6 +16,11 @@ var ErrPartialFrame = errors.New("client: partial Wayland frame write")
 // frames before writing any byte and leaves the connection usable.
 var ErrFrameSize = errors.New("client: request is not a valid single Wayland message")
 
+// ErrProxyDestroyed is returned by a request on a proxy that was destroyed,
+// or whose ID the server released with delete_id. The ID may already belong
+// to another object, so the request is not sent.
+var ErrProxyDestroyed = errors.New("client: request on a destroyed proxy")
+
 func (ctx *Context) WriteMsg(b []byte, oob []byte) error {
 	if ctx.fatalErr != nil {
 		return ctx.fatalErr
