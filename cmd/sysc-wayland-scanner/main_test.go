@@ -280,7 +280,7 @@ func TestScannerMarksDestroyedRegistryZombie(t *testing.T) {
 
 	runScanner(t, "-pkg", "client", "-prefix", "wl_", "-i", input, "-o", output)
 	generated := readFile(t, output)
-	want := []byte("func (i *Fixes) DestroyRegistry(registry *Registry) error {\n\tdefer registry.MarkZombie()")
+	want := []byte("func (i *Fixes) DestroyRegistry(registry *Registry) error {\n\tif i.IsZombie() || (registry != nil && registry.IsZombie()) {\n\t\treturn ErrProxyDestroyed\n\t}\n\tdefer registry.MarkZombie()")
 	if !bytes.Contains(generated, want) {
 		t.Fatalf("generated DestroyRegistry does not mark its target zombie:\n%s", generated)
 	}
@@ -636,3 +636,56 @@ const absorbProtocol = `<?xml version="1.0" encoding="UTF-8"?>
   </interface>
 </protocol>
 `
+
+// TestScannerRejectsCodeInXMLAttributes is the guard for attributes that
+// reach the generated source. A crafted interface name or enum value used to
+// close its literal and add a func init() that ran when the program built.
+func TestScannerRejectsCodeInXMLAttributes(t *testing.T) {
+	const injected = `a&quot;; func init() { panic(1) }; const b = &quot;`
+	tests := []struct {
+		name string
+		xml  string
+	}{
+		{name: "interface name", xml: `<interface name="` + injected + `" version="1"/>`},
+		{name: "enum value", xml: `<interface name="ok" version="1"><enum name="e"><entry name="x" value="1; func init() { panic(1) }"/></enum></interface>`},
+		{name: "enum entry name", xml: `<interface name="ok" version="1"><enum name="e"><entry name="x = 1; func init() {}; const y" value="1"/></enum></interface>`},
+		{name: "request name", xml: `<interface name="ok" version="1"><request name="x() {}; func init() {}; func (i *Ok) y"/></interface>`},
+		{name: "argument type", xml: `<interface name="ok" version="1"><request name="r"><arg name="a" type="int) {}; func init() {}; func f(x int"/></request></interface>`},
+		{name: "argument interface", xml: `<interface name="ok" version="1"><request name="r"><arg name="a" type="object" interface="x&quot;; func init() {}; var z = &quot;"/></request></interface>`},
+		{name: "request type", xml: `<interface name="ok" version="1"><request name="r" type="other"/></interface>`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			input := filepath.Join(dir, "crafted.xml")
+			output := filepath.Join(dir, "crafted.go")
+			writeFixture(t, input, `<?xml version="1.0" encoding="UTF-8"?><protocol name="crafted">`+tt.xml+`</protocol>`)
+			combined, err := scannerCommand("-pkg", "crafted", "-i", input, "-o", output).CombinedOutput()
+			if err == nil {
+				t.Fatalf("scanner accepted the crafted attribute:\n%s", combined)
+			}
+			if !strings.Contains(string(combined), "invalid protocol") {
+				t.Errorf("scanner output = %s, want it to name the invalid protocol", combined)
+			}
+			if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
+				t.Errorf("scanner wrote %s from a crafted protocol", output)
+			}
+		})
+	}
+}
+
+// TestScannerReadsOnlyLocalFiles is the guard for the remote input and its
+// cache: a URL was fetched without a digest, over plain HTTP if given, and the
+// cache under a predictable name was trusted on later runs.
+func TestScannerReadsOnlyLocalFiles(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "remote.go")
+	cmd := scannerCommand("-pkg", "remote", "-i", "http://127.0.0.1:1/wayland.xml", "-o", output)
+	cmd.Env = append(os.Environ(), "WAYLAND_SCANNER_USE_CACHE=1", "XDG_CACHE_HOME="+t.TempDir())
+	combined, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("scanner accepted a URL input:\n%s", combined)
+	}
+	if !strings.Contains(string(combined), "local") {
+		t.Errorf("scanner output = %s, want it to ask for a local file", combined)
+	}
+}

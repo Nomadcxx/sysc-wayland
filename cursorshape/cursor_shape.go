@@ -67,6 +67,9 @@ func NewWpCursorShapeManagerV1(ctx *client.Context) *WpCursorShapeManagerV1 {
 //
 // Destroy the cursor shape manager.
 func (i *WpCursorShapeManagerV1) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -87,6 +90,9 @@ func (i *WpCursorShapeManagerV1) Destroy() error {
 // When the pointer capability is removed from the wl_seat, the
 // wp_cursor_shape_device_v1 object becomes inert.
 func (i *WpCursorShapeManagerV1) GetPointer(pointer *client.Pointer) (*WpCursorShapeDeviceV1, error) {
+	if i.IsZombie() || (pointer != nil && pointer.IsZombie()) {
+		return nil, client.ErrProxyDestroyed
+	}
 	cursorShapeDevice := NewWpCursorShapeDeviceV1(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4
@@ -111,6 +117,9 @@ func (i *WpCursorShapeManagerV1) GetPointer(pointer *client.Pointer) (*WpCursorS
 // When the zwp_tablet_tool_v2 is removed, the wp_cursor_shape_device_v1
 // object becomes inert.
 func (i *WpCursorShapeManagerV1) GetTabletToolV2(tabletTool *ZwpTabletToolV2) (*WpCursorShapeDeviceV1, error) {
+	if i.IsZombie() || (tabletTool != nil && tabletTool.IsZombie()) {
+		return nil, client.ErrProxyDestroyed
+	}
 	cursorShapeDevice := NewWpCursorShapeDeviceV1(i.Context())
 	const opcode = 2
 	const _reqBufLen = 8 + 4 + 4
@@ -155,6 +164,9 @@ func NewWpCursorShapeDeviceV1(ctx *client.Context) *WpCursorShapeDeviceV1 {
 //
 // The device cursor shape remains unchanged.
 func (i *WpCursorShapeDeviceV1) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -191,6 +203,9 @@ func (i *WpCursorShapeDeviceV1) Destroy() error {
 //
 //	serial: serial number of the enter event
 func (i *WpCursorShapeDeviceV1) SetShape(serial, shape uint32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4
 	var _reqBuf [_reqBufLen]byte

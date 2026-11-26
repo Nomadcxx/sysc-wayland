@@ -81,9 +81,15 @@ func (ctx *Context) Unregister(p Proxy) {
 }
 
 func (ctx *Context) DeleteID(id uint32) {
-	if _, ok := ctx.objects[id]; !ok {
+	proxy, ok := ctx.objects[id]
+	if !ok {
 		return // unknown or already deleted: never queue twice
 	}
+	// The ID is free for the next object from here on. A proxy that still
+	// holds it must stop sending, including one this client never destroyed:
+	// an object the server destroyed itself, or a compositor that sends
+	// delete_id unprompted.
+	proxy.MarkZombie()
 	delete(ctx.objects, id)
 	if id > 1 && id < firstServerID { // never recycle the display (1) or server IDs
 		ctx.freeIDs = append(ctx.freeIDs, id)

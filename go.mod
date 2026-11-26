@@ -7,7 +7,6 @@ go 1.26.10
 
 require (
 	github.com/iancoleman/strcase v0.3.0
-	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/tools v0.52.0
 	mvdan.cc/gofumpt v0.12.0

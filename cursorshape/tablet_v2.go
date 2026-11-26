@@ -64,6 +64,9 @@ func NewZwpTabletManagerV2(ctx *client.Context) *ZwpTabletManagerV2 {
 //
 //	seat: The wl_seat object to retrieve the tablets for
 func (i *ZwpTabletManagerV2) GetTabletSeat(seat *client.Seat) (*ZwpTabletSeatV2, error) {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) {
+		return nil, client.ErrProxyDestroyed
+	}
 	tabletSeat := NewZwpTabletSeatV2(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4 + 4
@@ -86,6 +89,9 @@ func (i *ZwpTabletManagerV2) GetTabletSeat(seat *client.Seat) (*ZwpTabletSeatV2,
 // Destroy the wp_tablet_manager object. Objects created from this
 // object are unaffected and should be destroyed separately.
 func (i *ZwpTabletManagerV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -132,6 +138,9 @@ func NewZwpTabletSeatV2(ctx *client.Context) *ZwpTabletSeatV2 {
 // Destroy the wp_tablet_seat object. Objects created from this
 // object are unaffected and should be destroyed separately.
 func (i *ZwpTabletSeatV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -411,6 +420,9 @@ func NewZwpTabletToolV2(ctx *client.Context) *ZwpTabletToolV2 {
 //	hotspotX: surface-local x coordinate
 //	hotspotY: surface-local y coordinate
 func (i *ZwpTabletToolV2) SetCursor(serial uint32, surface *client.Surface, hotspotX, hotspotY int32) error {
+	if i.IsZombie() || (surface != nil && surface.IsZombie()) {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 0
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -440,6 +452,9 @@ func (i *ZwpTabletToolV2) SetCursor(serial uint32, surface *client.Surface, hots
 //
 // This destroys the client's resource for this tool object.
 func (i *ZwpTabletToolV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -1306,6 +1321,9 @@ func NewZwpTabletV2(ctx *client.Context) *ZwpTabletV2 {
 //
 // This destroys the client's resource for this tablet object.
 func (i *ZwpTabletV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -1553,6 +1571,9 @@ func NewZwpTabletPadRingV2(ctx *client.Context) *ZwpTabletPadRingV2 {
 //	description: ring description
 //	serial: serial of the mode switch event
 func (i *ZwpTabletPadRingV2) SetFeedback(description string, serial uint32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 0
 	descriptionLen := client.PaddedLen(len(description) + 1)
 	_reqBufLen := 8 + (4 + descriptionLen) + 4
@@ -1574,6 +1595,9 @@ func (i *ZwpTabletPadRingV2) SetFeedback(description string, serial uint32) erro
 //
 // This destroys the client's resource for this ring object.
 func (i *ZwpTabletPadRingV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -1813,6 +1837,9 @@ func NewZwpTabletPadStripV2(ctx *client.Context) *ZwpTabletPadStripV2 {
 //	description: strip description
 //	serial: serial of the mode switch event
 func (i *ZwpTabletPadStripV2) SetFeedback(description string, serial uint32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 0
 	descriptionLen := client.PaddedLen(len(description) + 1)
 	_reqBufLen := 8 + (4 + descriptionLen) + 4
@@ -1834,6 +1861,9 @@ func (i *ZwpTabletPadStripV2) SetFeedback(description string, serial uint32) err
 //
 // This destroys the client's resource for this strip object.
 func (i *ZwpTabletPadStripV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -2089,6 +2119,9 @@ func NewZwpTabletPadGroupV2(ctx *client.Context) *ZwpTabletPadGroupV2 {
 // Destroy the wp_tablet_pad_group object. Objects created from this object
 // are unaffected and should be destroyed separately.
 func (i *ZwpTabletPadGroupV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -2467,6 +2500,9 @@ func NewZwpTabletPadV2(ctx *client.Context) *ZwpTabletPadV2 {
 //	description: button description
 //	serial: serial of the mode switch event
 func (i *ZwpTabletPadV2) SetFeedback(button uint32, description string, serial uint32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 0
 	descriptionLen := client.PaddedLen(len(description) + 1)
 	_reqBufLen := 8 + 4 + (4 + descriptionLen) + 4
@@ -2491,6 +2527,9 @@ func (i *ZwpTabletPadV2) SetFeedback(button uint32, description string, serial u
 // Destroy the wp_tablet_pad object. Objects created from this object
 // are unaffected and should be destroyed separately.
 func (i *ZwpTabletPadV2) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8

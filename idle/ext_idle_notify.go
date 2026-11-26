@@ -62,6 +62,9 @@ func NewExtIdleNotifierV1(ctx *client.Context) *ExtIdleNotifierV1 {
 // Destroy the manager object. All objects created via this interface
 // remain valid.
 func (i *ExtIdleNotifierV1) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -88,6 +91,9 @@ func (i *ExtIdleNotifierV1) Destroy() error {
 //
 //	timeout: minimum idle timeout in msec
 func (i *ExtIdleNotifierV1) GetIdleNotification(timeout uint32, seat *client.Seat) (*ExtIdleNotificationV1, error) {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) {
+		return nil, client.ErrProxyDestroyed
+	}
 	id := NewExtIdleNotificationV1(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4 + 4
@@ -122,6 +128,9 @@ func (i *ExtIdleNotifierV1) GetIdleNotification(timeout uint32, seat *client.Sea
 //
 //	timeout: minimum idle timeout in msec
 func (i *ExtIdleNotifierV1) GetInputIdleNotification(timeout uint32, seat *client.Seat) (*ExtIdleNotificationV1, error) {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) {
+		return nil, client.ErrProxyDestroyed
+	}
 	id := NewExtIdleNotificationV1(i.Context())
 	const opcode = 2
 	const _reqBufLen = 8 + 4 + 4 + 4
@@ -210,6 +219,9 @@ func NewExtIdleNotificationV1(ctx *client.Context) *ExtIdleNotificationV1 {
 //
 // Destroy the notification object.
 func (i *ExtIdleNotificationV1) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8

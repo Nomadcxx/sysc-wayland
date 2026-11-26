@@ -55,6 +55,9 @@ func NewExtSessionLockManagerV1(ctx *client.Context) *ExtSessionLockManagerV1 {
 // no longer be used. Existing objects created through this interface
 // remain valid.
 func (i *ExtSessionLockManagerV1) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -75,6 +78,9 @@ func (i *ExtSessionLockManagerV1) Destroy() error {
 // or ext_session_lock_v1.finished event on the created object in
 // response to this request.
 func (i *ExtSessionLockManagerV1) Lock() (*ExtSessionLockV1, error) {
+	if i.IsZombie() {
+		return nil, client.ErrProxyDestroyed
+	}
 	id := NewExtSessionLockV1(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4
@@ -219,6 +225,9 @@ func NewExtSessionLockV1(ctx *client.Context) *ExtSessionLockV1 {
 // It is a protocol error to make this request if the locked event was
 // sent, the unlock_and_destroy request must be used instead.
 func (i *ExtSessionLockV1) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -246,6 +255,9 @@ func (i *ExtSessionLockV1) Destroy() error {
 // Attempting to create more than one lock surface for a given output
 // is a duplicate_output protocol error.
 func (i *ExtSessionLockV1) GetLockSurface(surface *client.Surface, output *client.Output) (*ExtSessionLockSurfaceV1, error) {
+	if i.IsZombie() || (surface != nil && surface.IsZombie()) || (output != nil && output.IsZombie()) {
+		return nil, client.ErrProxyDestroyed
+	}
 	id := NewExtSessionLockSurfaceV1(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4 + 4
@@ -291,6 +303,9 @@ func (i *ExtSessionLockV1) GetLockSurface(surface *client.Surface, output *clien
 // the server might terminate the client with a protocol error before
 // it processes the unlock_and_destroy request.
 func (i *ExtSessionLockV1) UnlockAndDestroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 2
 	const _reqBufLen = 8
@@ -496,6 +511,9 @@ func NewExtSessionLockSurfaceV1(ctx *client.Context) *ExtSessionLockSurfaceV1 {
 // ext_session_lock_v1.unlock_and_destroy event is sent, the compositor
 // must fall back to rendering a solid color.
 func (i *ExtSessionLockSurfaceV1) Destroy() error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -538,6 +556,9 @@ func (i *ExtSessionLockSurfaceV1) Destroy() error {
 //
 //	serial: serial from the configure event
 func (i *ExtSessionLockSurfaceV1) AckConfigure(serial uint32) error {
+	if i.IsZombie() {
+		return client.ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte

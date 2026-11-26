@@ -72,6 +72,9 @@ func NewDisplay(ctx *Context) *Display {
 //
 // The callback_data passed in the callback is undefined and should be ignored.
 func (i *Display) Sync() (*Callback, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	callback := NewCallback(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4
@@ -99,6 +102,9 @@ func (i *Display) Sync() (*Callback, error) {
 // Therefore, clients should invoke get_registry as infrequently as
 // possible to avoid wasting memory.
 func (i *Display) GetRegistry() (*Registry, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	registry := NewRegistry(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4
@@ -325,6 +331,9 @@ func NewRegistry(ctx *Context) *Registry {
 //
 //	name: unique numeric name of the object
 func (i *Registry) Bind(name uint32, iface string, version uint32, id Proxy) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 0
 	ifaceLen := PaddedLen(len(iface) + 1)
 	_reqBufLen := 8 + 4 + (4 + ifaceLen) + 4 + 4
@@ -538,6 +547,9 @@ func NewCompositor(ctx *Context) *Compositor {
 //
 // Ask the compositor to create a new surface.
 func (i *Compositor) CreateSurface() (*Surface, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewSurface(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4
@@ -557,6 +569,9 @@ func (i *Compositor) CreateSurface() (*Surface, error) {
 //
 // Ask the compositor to create a new region.
 func (i *Compositor) CreateRegion() (*Region, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewRegion(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4
@@ -630,6 +645,9 @@ func NewShmPool(ctx *Context) *ShmPool {
 //	stride: number of bytes from the beginning of one row to the beginning of the next row
 //	format: buffer pixel format
 func (i *ShmPool) CreateBuffer(offset, width, height, stride int32, format uint32) (*Buffer, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewBuffer(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4 + 4 + 4
@@ -663,6 +681,9 @@ func (i *ShmPool) CreateBuffer(offset, width, height, stride int32, format uint3
 // buffers that have been created from this pool
 // are gone.
 func (i *ShmPool) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -691,6 +712,9 @@ func (i *ShmPool) Destroy() error {
 //
 //	size: new size of the pool, in bytes
 func (i *ShmPool) Resize(size int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 2
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -754,6 +778,9 @@ func NewShm(ctx *Context) *Shm {
 //	fd: file descriptor for the pool
 //	size: pool size, in bytes
 func (i *Shm) CreatePool(fd int, size int32) (*ShmPool, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewShmPool(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4 + 4
@@ -779,6 +806,9 @@ func (i *Shm) CreatePool(fd int, size int32) (*ShmPool, error) {
 //
 // Objects created via this interface remain unaffected.
 func (i *Shm) Release() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -1692,6 +1722,9 @@ func NewBuffer(ctx *Context) *Buffer {
 //
 // For possible side-effects to a surface, see wl_surface.attach.
 func (i *Buffer) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -1803,6 +1836,9 @@ func NewDataOffer(ctx *Context) *DataOffer {
 //
 // A nil mimeType sends the protocol NULL.
 func (i *DataOffer) Accept(serial uint32, mimeType *string) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 0
 	mimeTypeLen := 0
 	if mimeType != nil {
@@ -1849,6 +1885,9 @@ func (i *DataOffer) Accept(serial uint32, mimeType *string) error {
 //	mimeType: mime type desired by receiver
 //	fd: file descriptor for data transfer
 func (i *DataOffer) Receive(mimeType string, fd int) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 1
 	mimeTypeLen := PaddedLen(len(mimeType) + 1)
 	_reqBufLen := 8 + (4 + mimeTypeLen)
@@ -1869,6 +1908,9 @@ func (i *DataOffer) Receive(mimeType string, fd int) error {
 //
 // Destroy the data offer.
 func (i *DataOffer) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 2
 	const _reqBufLen = 8
@@ -1899,6 +1941,9 @@ func (i *DataOffer) Destroy() error {
 // If wl_data_offer.finish request is received for a non drag and drop
 // operation, the invalid_finish protocol error is raised.
 func (i *DataOffer) Finish() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 3
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -1948,6 +1993,9 @@ func (i *DataOffer) Finish() error {
 //	dndActions: actions supported by the destination client
 //	preferredAction: action preferred by the destination client
 func (i *DataOffer) SetActions(dndActions, preferredAction uint32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 4
 	const _reqBufLen = 8 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -2184,6 +2232,9 @@ func NewDataSource(ctx *Context) *DataSource {
 //
 //	mimeType: mime type offered by the data source
 func (i *DataSource) Offer(mimeType string) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 0
 	mimeTypeLen := PaddedLen(len(mimeType) + 1)
 	_reqBufLen := 8 + (4 + mimeTypeLen)
@@ -2203,6 +2254,9 @@ func (i *DataSource) Offer(mimeType string) error {
 //
 // Destroy the data source.
 func (i *DataSource) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -2234,6 +2288,9 @@ func (i *DataSource) Destroy() error {
 //
 //	dndActions: actions supported by the data source
 func (i *DataSource) SetActions(dndActions uint32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 2
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -2592,6 +2649,9 @@ func NewDataDevice(ctx *Context) *DataDevice {
 //	icon: drag-and-drop icon surface
 //	serial: serial number of the implicit grab on the origin
 func (i *DataDevice) StartDrag(source *DataSource, origin, icon *Surface, serial uint32) error {
+	if i.IsZombie() || (source != nil && source.IsZombie()) || (origin != nil && origin.IsZombie()) || (icon != nil && icon.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 0
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -2636,6 +2696,9 @@ func (i *DataDevice) StartDrag(source *DataSource, origin, icon *Surface, serial
 //	source: data source for the selection
 //	serial: serial number of the event that triggered this request
 func (i *DataDevice) SetSelection(source *DataSource, serial uint32) error {
+	if i.IsZombie() || (source != nil && source.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -2661,6 +2724,9 @@ func (i *DataDevice) SetSelection(source *DataSource, serial uint32) error {
 //
 // This request destroys the data device.
 func (i *DataDevice) Release() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 2
 	const _reqBufLen = 8
@@ -2986,6 +3052,9 @@ func NewDataDeviceManager(ctx *Context) *DataDeviceManager {
 //
 // Create a new data source.
 func (i *DataDeviceManager) CreateDataSource() (*DataSource, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewDataSource(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4
@@ -3007,6 +3076,9 @@ func (i *DataDeviceManager) CreateDataSource() (*DataSource, error) {
 //
 //	seat: seat associated with the data device
 func (i *DataDeviceManager) GetDataDevice(seat *Seat) (*DataDevice, error) {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewDataDevice(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4
@@ -3148,6 +3220,9 @@ func NewShell(ctx *Context) *Shell {
 //
 //	surface: surface to be given the shell surface role
 func (i *Shell) GetShellSurface(surface *Surface) (*ShellSurface, error) {
+	if i.IsZombie() || (surface != nil && surface.IsZombie()) {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewShellSurface(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4 + 4
@@ -3251,6 +3326,9 @@ func NewShellSurface(ctx *Context) *ShellSurface {
 //
 //	serial: serial number of the ping event
 func (i *ShellSurface) Pong(serial uint32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 0
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -3276,6 +3354,9 @@ func (i *ShellSurface) Pong(serial uint32) error {
 //	seat: seat whose pointer is used
 //	serial: serial number of the implicit grab on the pointer
 func (i *ShellSurface) Move(seat *Seat, serial uint32) error {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -3304,6 +3385,9 @@ func (i *ShellSurface) Move(seat *Seat, serial uint32) error {
 //	serial: serial number of the implicit grab on the pointer
 //	edges: which edge or corner is being dragged
 func (i *ShellSurface) Resize(seat *Seat, serial, edges uint32) error {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 2
 	const _reqBufLen = 8 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -3328,6 +3412,9 @@ func (i *ShellSurface) Resize(seat *Seat, serial, edges uint32) error {
 //
 // A toplevel surface is not fullscreen, maximized or transient.
 func (i *ShellSurface) SetToplevel() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 3
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -3355,6 +3442,9 @@ func (i *ShellSurface) SetToplevel() error {
 //	y: surface-local y coordinate
 //	flags: transient surface behavior
 func (i *ShellSurface) SetTransient(parent *Surface, x, y int32, flags uint32) error {
+	if i.IsZombie() || (parent != nil && parent.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 4
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -3415,6 +3505,9 @@ func (i *ShellSurface) SetTransient(parent *Surface, x, y int32, flags uint32) e
 //	framerate: framerate in mHz
 //	output: output on which the surface is to be fullscreen
 func (i *ShellSurface) SetFullscreen(method, framerate uint32, output *Output) error {
+	if i.IsZombie() || (output != nil && output.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 5
 	const _reqBufLen = 8 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -3467,6 +3560,9 @@ func (i *ShellSurface) SetFullscreen(method, framerate uint32, output *Output) e
 //	y: surface-local y coordinate
 //	flags: transient surface behavior
 func (i *ShellSurface) SetPopup(seat *Seat, serial uint32, parent *Surface, x, y int32, flags uint32) error {
+	if i.IsZombie() || (seat != nil && seat.IsZombie()) || (parent != nil && parent.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 6
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -3514,6 +3610,9 @@ func (i *ShellSurface) SetPopup(seat *Seat, serial uint32, parent *Surface, x, y
 //
 //	output: output on which the surface is to be maximized
 func (i *ShellSurface) SetMaximized(output *Output) error {
+	if i.IsZombie() || (output != nil && output.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 7
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -3545,6 +3644,9 @@ func (i *ShellSurface) SetMaximized(output *Output) error {
 //
 //	title: surface title
 func (i *ShellSurface) SetTitle(title string) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 8
 	titleLen := PaddedLen(len(title) + 1)
 	_reqBufLen := 8 + (4 + titleLen)
@@ -3571,6 +3673,9 @@ func (i *ShellSurface) SetTitle(title string) error {
 //
 //	class: surface class
 func (i *ShellSurface) SetClass(class string) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 9
 	classLen := PaddedLen(len(class) + 1)
 	_reqBufLen := 8 + (4 + classLen)
@@ -3970,6 +4075,9 @@ func NewSurface(ctx *Context) *Surface {
 //
 // Deletes the surface and invalidates its object ID.
 func (i *Surface) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -4055,6 +4163,9 @@ func (i *Surface) Destroy() error {
 //	x: surface-local x coordinate
 //	y: surface-local y coordinate
 func (i *Surface) Attach(buffer *Buffer, x, y int32) error {
+	if i.IsZombie() || (buffer != nil && buffer.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4107,6 +4218,9 @@ func (i *Surface) Attach(buffer *Buffer, x, y int32) error {
 //	width: width of damage rectangle
 //	height: height of damage rectangle
 func (i *Surface) Damage(x, y, width, height int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 2
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4162,6 +4276,9 @@ func (i *Surface) Damage(x, y, width, height int32) error {
 // The callback_data passed in the callback is the current time, in
 // milliseconds, with an undefined base.
 func (i *Surface) Frame() (*Callback, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	callback := NewCallback(i.Context())
 	const opcode = 3
 	const _reqBufLen = 8 + 4
@@ -4206,6 +4323,9 @@ func (i *Surface) Frame() (*Callback, error) {
 //
 //	region: opaque region of the surface
 func (i *Surface) SetOpaqueRegion(region *Region) error {
+	if i.IsZombie() || (region != nil && region.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 4
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4252,6 +4372,9 @@ func (i *Surface) SetOpaqueRegion(region *Region) error {
 //
 //	region: input region of the surface
 func (i *Surface) SetInputRegion(region *Region) error {
+	if i.IsZombie() || (region != nil && region.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 5
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4293,6 +4416,9 @@ func (i *Surface) SetInputRegion(region *Region) error {
 //
 // Other interfaces may add further double-buffered surface state.
 func (i *Surface) Commit() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 6
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -4341,6 +4467,9 @@ func (i *Surface) Commit() error {
 //
 //	transform: transform for interpreting buffer contents
 func (i *Surface) SetBufferTransform(transform int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 7
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4383,6 +4512,9 @@ func (i *Surface) SetBufferTransform(transform int32) error {
 //
 //	scale: scale for interpreting buffer contents
 func (i *Surface) SetBufferScale(scale int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 8
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4437,6 +4569,9 @@ func (i *Surface) SetBufferScale(scale int32) error {
 //	width: width of damage rectangle
 //	height: height of damage rectangle
 func (i *Surface) DamageBuffer(x, y, width, height int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 9
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4478,6 +4613,9 @@ func (i *Surface) DamageBuffer(x, y, width, height int32) error {
 //	x: surface-local x coordinate
 //	y: surface-local y coordinate
 func (i *Surface) Offset(x, y int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 10
 	const _reqBufLen = 8 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -4734,6 +4872,9 @@ func NewSeat(ctx *Context) *Seat {
 // never had the pointer capability. The missing_capability error will
 // be sent in this case.
 func (i *Seat) GetPointer() (*Pointer, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewPointer(i.Context())
 	const opcode = 0
 	const _reqBufLen = 8 + 4
@@ -4760,6 +4901,9 @@ func (i *Seat) GetPointer() (*Pointer, error) {
 // never had the keyboard capability. The missing_capability error will
 // be sent in this case.
 func (i *Seat) GetKeyboard() (*Keyboard, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewKeyboard(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4
@@ -4786,6 +4930,9 @@ func (i *Seat) GetKeyboard() (*Keyboard, error) {
 // never had the touch capability. The missing_capability error will
 // be sent in this case.
 func (i *Seat) GetTouch() (*Touch, error) {
+	if i.IsZombie() {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewTouch(i.Context())
 	const opcode = 2
 	const _reqBufLen = 8 + 4
@@ -4806,6 +4953,9 @@ func (i *Seat) GetTouch() (*Touch, error) {
 // Using this request a client can tell the server that it is not going to
 // use the seat object anymore.
 func (i *Seat) Release() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 3
 	const _reqBufLen = 8
@@ -5092,6 +5242,9 @@ func NewPointer(ctx *Context) *Pointer {
 //	hotspotX: surface-local x coordinate
 //	hotspotY: surface-local y coordinate
 func (i *Pointer) SetCursor(serial uint32, surface *Surface, hotspotX, hotspotY int32) error {
+	if i.IsZombie() || (surface != nil && surface.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 0
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -5125,6 +5278,9 @@ func (i *Pointer) SetCursor(serial uint32, surface *Surface, hotspotX, hotspotY 
 // This request destroys the pointer proxy object, so clients must not call
 // wl_pointer_destroy() after using this request.
 func (i *Pointer) Release() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8
@@ -5906,6 +6062,9 @@ func NewKeyboard(ctx *Context) *Keyboard {
 
 // Release : release the keyboard object
 func (i *Keyboard) Release() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -6344,6 +6503,9 @@ func NewTouch(ctx *Context) *Touch {
 
 // Release : release the touch object
 func (i *Touch) Release() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -6670,6 +6832,9 @@ func NewOutput(ctx *Context) *Output {
 // Using this request a client can tell the server that it is not going to
 // use the output object anymore.
 func (i *Output) Release() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -7237,6 +7402,9 @@ func NewRegion(ctx *Context) *Region {
 //
 // Destroy the region.  This will invalidate the object ID.
 func (i *Region) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -7259,6 +7427,9 @@ func (i *Region) Destroy() error {
 //	width: rectangle width
 //	height: rectangle height
 func (i *Region) Add(x, y, width, height int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -7288,6 +7459,9 @@ func (i *Region) Add(x, y, width, height int32) error {
 //	width: rectangle width
 //	height: rectangle height
 func (i *Region) Subtract(x, y, width, height int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 2
 	const _reqBufLen = 8 + 4 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -7371,6 +7545,9 @@ func NewSubcompositor(ctx *Context) *Subcompositor {
 // protocol object anymore. This does not affect any other
 // objects, wl_subsurface objects included.
 func (i *Subcompositor) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -7409,6 +7586,9 @@ func (i *Subcompositor) Destroy() error {
 //	surface: the surface to be turned into a sub-surface
 //	parent: the parent surface
 func (i *Subcompositor) GetSubsurface(surface, parent *Surface) (*Subsurface, error) {
+	if i.IsZombie() || (surface != nil && surface.IsZombie()) || (parent != nil && parent.IsZombie()) {
+		return nil, ErrProxyDestroyed
+	}
 	id := NewSubsurface(i.Context())
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4 + 4
@@ -7594,6 +7774,9 @@ func NewSubsurface(ctx *Context) *Subsurface {
 // wl_subcompositor.get_subsurface request. The wl_surface's association
 // to the parent is deleted. The wl_surface is unmapped immediately.
 func (i *Subsurface) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -7627,6 +7810,9 @@ func (i *Subsurface) Destroy() error {
 //	x: x coordinate in the parent surface
 //	y: y coordinate in the parent surface
 func (i *Subsurface) SetPosition(x, y int32) error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -7661,6 +7847,9 @@ func (i *Subsurface) SetPosition(x, y int32) error {
 //
 //	sibling: the reference surface
 func (i *Subsurface) PlaceAbove(sibling *Surface) error {
+	if i.IsZombie() || (sibling != nil && sibling.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 2
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -7682,6 +7871,9 @@ func (i *Subsurface) PlaceAbove(sibling *Surface) error {
 //
 //	sibling: the reference surface
 func (i *Subsurface) PlaceBelow(sibling *Surface) error {
+	if i.IsZombie() || (sibling != nil && sibling.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	const opcode = 3
 	const _reqBufLen = 8 + 4
 	var _reqBuf [_reqBufLen]byte
@@ -7712,6 +7904,9 @@ func (i *Subsurface) PlaceBelow(sibling *Surface) error {
 //
 // See wl_subsurface for the recursive effect of this mode.
 func (i *Subsurface) SetSync() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 4
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -7746,6 +7941,9 @@ func (i *Subsurface) SetSync() error {
 // If a surface's parent surface behaves as desynchronized, then
 // the cached state is applied on set_desync.
 func (i *Subsurface) SetDesync() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	const opcode = 5
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
@@ -7813,6 +8011,9 @@ func NewFixes(ctx *Context) *Fixes {
 
 // Destroy : destroys this object
 func (i *Fixes) Destroy() error {
+	if i.IsZombie() {
+		return ErrProxyDestroyed
+	}
 	defer i.MarkZombie()
 	const opcode = 0
 	const _reqBufLen = 8
@@ -7840,6 +8041,9 @@ func (i *Fixes) Destroy() error {
 //
 //	registry: the registry to destroy
 func (i *Fixes) DestroyRegistry(registry *Registry) error {
+	if i.IsZombie() || (registry != nil && registry.IsZombie()) {
+		return ErrProxyDestroyed
+	}
 	defer registry.MarkZombie()
 	const opcode = 1
 	const _reqBufLen = 8 + 4

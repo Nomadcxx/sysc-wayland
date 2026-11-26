@@ -59,7 +59,7 @@ The scanner is `cmd/sysc-wayland-scanner`:
 go run ./cmd/sysc-wayland-scanner -i protocols/wayland.xml -o /tmp/sysc-wayland-core.go -pkg client -prefix wl
 ```
 
-Flags: `-i` input XML, `-o` output Go file, `-pkg` package name, `-prefix`, `-suffix`, and
+Flags: `-i` input XML (a local file; URLs are refused), `-o` output Go file, `-pkg` package name, `-prefix`, `-suffix`, and
 `-xdg-shell-import` for protocols that reference external `xdg_*` types. The repo ships six XMLs in
 `protocols/`. Fetch xdg-shell, fractional-scale and viewporter from wayland-protocols;
 wlr-layer-shell comes from wlr-protocols. In-repo invocations are `//go:generate` lines next to each package.
